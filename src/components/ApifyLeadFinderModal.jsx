@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Search, Sparkles, AlertCircle, RefreshCw } from "lucide-react";
 import { searchLeadsApify } from "../utils/apifyService";
+import { fetchAppSettings } from "../utils/dataService";
 
 export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads }) {
   const [niche, setNiche] = useState("Clínica Odontológica");
@@ -12,6 +13,17 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+
+  useEffect(() => {
+    if (isOpen && !apifyToken) {
+      fetchAppSettings().then((settings) => {
+        if (settings?.apify_api_token) {
+          setApifyToken(settings.apify_api_token);
+          localStorage.setItem("APIFY_API_TOKEN", settings.apify_api_token);
+        }
+      });
+    }
+  }, [isOpen, apifyToken]);
 
   if (!isOpen) return null;
 

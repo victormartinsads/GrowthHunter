@@ -66,3 +66,25 @@ create policy "allow_all_anon" on public.companies
   for all
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────
+-- TABELA: app_settings (chaves de API e configurações)
+-- ─────────────────────────────────────────────────────────────────
+create table if not exists public.app_settings (
+  id                          text primary key default 'default',
+  openai_api_key              text default '',
+  pagespeed_api_key           text default '',
+  apify_api_token             text default '',
+  whatsapp_access_token       text default '',
+  whatsapp_phone_number_id    text default '',
+  whatsapp_business_account_id text default '',
+  created_at                  timestamptz default now(),
+  updated_at                  timestamptz default now()
+);
+
+alter table public.app_settings enable row level security;
+
+drop policy if exists "allow_all_anon_settings" on public.app_settings;
+create policy "allow_all_anon_settings" on public.app_settings
+  for all using (true) with check (true);
+

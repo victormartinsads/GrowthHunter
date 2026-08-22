@@ -232,3 +232,59 @@ export function subscribeToCompanies({ onInsert, onUpdate, onDelete } = {}) {
       (payload) => onDelete && onDelete(payload.old))
     .subscribe();
 }
+
+// ─────────────────────────────────────────────────────────────────
+// CONFIGURAÇÕES DO SISTEMA (API KEYS)
+// ─────────────────────────────────────────────────────────────────
+
+/** Busca as configurações e chaves de API do Supabase */
+export async function fetchAppSettings(id = "default") {
+  try {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      console.warn("[Supabase] fetchAppSettings warning:", error.message);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error("[Supabase] fetchAppSettings exception:", err);
+    return null;
+  }
+}
+
+/** Salva/atualiza as configurações e chaves de API no Supabase */
+export async function saveAppSettings(settings, id = "default") {
+  try {
+    const payload = {
+      id,
+      openai_api_key: settings.openai_api_key ?? settings.openAiKey ?? "",
+      pagespeed_api_key: settings.pagespeed_api_key ?? settings.pageSpeedKey ?? "",
+      apify_api_token: settings.apify_api_token ?? settings.apifyToken ?? "",
+      whatsapp_access_token: settings.whatsapp_access_token ?? settings.whatsappToken ?? "",
+      whatsapp_phone_number_id: settings.whatsapp_phone_number_id ?? settings.phoneId ?? "",
+      whatsapp_business_account_id: settings.whatsapp_business_account_id ?? settings.wabaId ?? "",
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .upsert(payload, { onConflict: "id" })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[Supabase] saveAppSettings error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (err) {
+    console.error("[Supabase] saveAppSettings exception:", err);
+    return { success: false, error: err.message };
+  }
+}
+
