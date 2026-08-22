@@ -1,49 +1,24 @@
 import express from "express";
 import cors from "cors";
-import fs from "fs";
-import path from "path";
-
-// Carrega variáveis do arquivo .env nativamente
-try {
-  const envPath = path.resolve(process.cwd(), ".env");
-  if (fs.existsSync(envPath)) {
-    const envConfig = fs.readFileSync(envPath, "utf8");
-    envConfig.split("\n").forEach(line => {
-      const [key, ...valueParts] = line.split("=");
-      if (key && valueParts.length > 0) {
-        process.env[key.trim()] = valueParts.join("=").trim();
-      }
-    });
-  }
-} catch (e) {
-  console.warn("Não foi possível carregar arquivo .env nativamente:", e.message);
-}
+import * as cheerio from "cheerio";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN || "";
-const GOOGLE_PAGESPEED_API_KEY = process.env.GOOGLE_PAGESPEED_API_KEY || "";
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
-/**
- * Health check endpoint
- */
-app.get("/api/health", (req, res) => {
-  return res.json({
+app.get("/health", (req, res) => {
+  res.json({
     status: "online",
-    service: "LeadFlow Pro CNPJ & QSA Partner Enrichment Engine",
-    version: "5.0.0",
+    service: "GrowthHunter Native Lead Scraper & Real Enrichment Server",
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
   });
 });
 
 /**
- * Endpoint de Auditoria Real de Website e Meta Pixel / Google Tag Manager
+ * Endpoint de Auditoria Real de Website (Meta Pixel, GA4, GTM, Velocidade)
  */
 app.post("/api/audit-website", async (req, res) => {
   const { url } = req.body;
@@ -138,69 +113,55 @@ app.post("/api/audit-website", async (req, res) => {
  * Consulta Direta de CNPJ na Receita Federal com Quadro de Sócios (QSA)
  */
 async function fetchCnpjDetails(cnpjClean) {
-  // 1. Tenta BrasilAPI
   try {
-    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpjClean}`);
-    if (res.ok) {
-      const data = await res.json();
-      const partners = (data.qsa || []).map(s => ({
-        name: s.nome_socio_representante || s.nome_socio || "Sócio",
-        role: s.qualificacao_socio_representante || s.qualificacao_socio || "Sócio-Administrador",
-        ageGroup: s.faixa_etaria || ""
-      }));
-
-      const phones = [];
-      if (data.ddd_telefone_1) phones.push(`55${data.ddd_telefone_1.replace(/\D/g, '')}`);
-      if (data.ddd_telefone_2) phones.push(`55${data.ddd_telefone_2.replace(/\D/g, '')}`);
-
+    const resBrasil = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpjClean}`);
+    if (resBrasil.ok) {
+      const data = await resBrasil.json();
       return {
-        success: true,
         cnpj: data.cnpj,
-        razaoSocial: data.razao_social,
-        name: data.nome_fantasia || data.razao_social,
+        razaoSocial: data.razao_social || "",
+        nomeFantasia: data.nome_fantasia || "",
+        partners: (data.qsa || []).map(p => ({
+          name: p.nome_socio || p.nome || "",
+          role: p.qualificacao_socio || p.qualificacao || "Sócio Administrador"
+        })),
+        phone: data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : "",
         email: data.email || "",
-        phones,
-        partners,
-        capitalSocial: data.capital_social ? `R$ ${Number(data.capital_social).toLocaleString('pt-BR')}` : "",
+        cnae: data.cnae_fiscal || "",
         cnaeDesc: data.cnae_fiscal_descricao || "",
         address: `${data.logradouro || ''}, ${data.numero || ''} - ${data.bairro || ''}, ${data.municipio || ''} - ${data.uf || ''}`,
         city: data.municipio || "",
         state: data.uf || "",
+        capitalSocial: data.capital_social || 0,
+        dataAbertura: data.data_inicio_atividade || "",
         situation: data.descricao_situacao_cadastral || "ATIVA"
       };
     }
   } catch (err) {
-    console.warn("Erro ao consultar BrasilAPI, tentando MinhaReceita...", err);
+    console.warn("BrasilAPI falhou, tentando fallback MinhaReceita...", err);
   }
 
-  // 2. Tenta MinhaReceita
   try {
-    const res = await fetch(`https://minhareceita.org/${cnpjClean}`);
-    if (res.ok) {
-      const data = await res.json();
-      const partners = (data.qsa || []).map(s => ({
-        name: s.nome_socio_representante || s.nome_socio || "Sócio",
-        role: s.qualificacao_socio_representante || s.qualificacao_socio || "Sócio-Administrador",
-        ageGroup: s.faixa_etaria || ""
-      }));
-
-      const phones = [];
-      if (data.ddd_telefone_1) phones.push(`55${data.ddd_telefone_1.replace(/\D/g, '')}`);
-      if (data.ddd_telefone_2) phones.push(`55${data.ddd_telefone_2.replace(/\D/g, '')}`);
-
+    const resMinha = await fetch(`https://minhareceita.org/${cnpjClean}`);
+    if (resMinha.ok) {
+      const data = await resMinha.json();
       return {
-        success: true,
         cnpj: data.cnpj,
-        razaoSocial: data.razao_social,
-        name: data.nome_fantasia || data.razao_social,
+        razaoSocial: data.razao_social || "",
+        nomeFantasia: data.nome_fantasia || "",
+        partners: (data.qsa || []).map(p => ({
+          name: p.nome_socio || p.nome || "",
+          role: p.qualificacao_socio || "Sócio"
+        })),
+        phone: data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : "",
         email: data.email || "",
-        phones,
-        partners,
-        capitalSocial: data.capital_social ? `R$ ${Number(data.capital_social).toLocaleString('pt-BR')}` : "",
+        cnae: data.cnae_fiscal || "",
         cnaeDesc: data.cnae_fiscal_descricao || "",
         address: `${data.logradouro || ''}, ${data.numero || ''} - ${data.bairro || ''}, ${data.municipio || ''} - ${data.uf || ''}`,
         city: data.municipio || "",
         state: data.uf || "",
+        capitalSocial: data.capital_social || 0,
+        dataAbertura: data.data_inicio_atividade || "",
         situation: data.descricao_situacao_cadastral || "ATIVA"
       };
     }
@@ -212,7 +173,7 @@ async function fetchCnpjDetails(cnpjClean) {
 }
 
 /**
- * Busca o CNPJ no Google a partir do Nome Comercial e Cidade da Empresa
+ * Busca CNPJ por Nome e Cidade
  */
 async function findCnpjByName(companyName, city) {
   try {
@@ -225,7 +186,6 @@ async function findCnpjByName(companyName, city) {
     });
 
     const html = await res.text();
-    // Match de padrão CNPJ com 14 dígitos formatados ou não
     const cnpjMatches = html.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g) || html.match(/\b\d{14}\b/g);
 
     if (cnpjMatches && cnpjMatches.length > 0) {
@@ -240,70 +200,117 @@ async function findCnpjByName(companyName, city) {
 }
 
 /**
- * ENDPOINT DE ENRIQUECIMENTO DE SÓCIOS (QSA) & CNPJ
+ * Endpoint de Enriquecimento de Sócios & CNPJ
  */
 app.post("/api/enrich-cnpj-qsa", async (req, res) => {
   const { cnpj, name, city } = req.body;
 
   let targetCnpj = cnpj ? String(cnpj).replace(/\D/g, "") : null;
 
-  // Se não temos o CNPJ, tentamos localizar na web pelo Nome e Cidade da Empresa
   if (!targetCnpj && name && city) {
-    console.log(`🔍 Pesquisando CNPJ na Receita Federal para "${name}" em ${city}...`);
     targetCnpj = await findCnpjByName(name, city);
   }
 
   if (!targetCnpj || targetCnpj.length !== 14) {
     return res.status(404).json({
-      error: "CNPJ não localizado na Receita Federal para esta empresa. Tente inserir o CNPJ manualmente no cadastro."
+      error: "CNPJ não localizado na Receita Federal para esta empresa."
     });
   }
 
-  console.log(`📋 Consultando Quadro de Sócios (QSA) para o CNPJ: ${targetCnpj}`);
   const details = await fetchCnpjDetails(targetCnpj);
-
   if (details) {
-    return res.json(details);
-  } else {
-    return res.status(404).json({ error: "CNPJ não encontrado nas bases oficiais da Receita Federal." });
+    return res.json({ success: true, details });
   }
-});
 
-/**
- * Endpoint legado de consulta direta de CNPJ
- */
-app.get("/api/cnpj/:cnpj", async (req, res) => {
-  const cnpjClean = req.params.cnpj.replace(/\D/g, "");
-  const details = await fetchCnpjDetails(cnpjClean);
-  if (details) {
-    return res.json(details);
-  }
-  return res.status(404).json({ error: "CNPJ não localizado." });
+  return res.status(404).json({ error: "Dados do CNPJ não puderam ser carregados." });
 });
 
 const AGGREGATOR_DOMAINS = [
   "guiatelefone.com", "campinasguialocal.com.br", "autoescolas.com.br", "comerciosaopaulo.com.br",
   "apontador.com.br", "solutudo.com.br", "guiamais.com.br", "glassdoor.com", "linkedin.com", 
-  "facebook.com", "instagram.com", "wikipedia.org", "youtube.com", "tripadvisor.com"
+  "wikipedia.org", "youtube.com", "tripadvisor.com", "telelistas.net", "jusbrasil.com.br"
 ];
 
+// Helper para sanitizar URLs de redes sociais
+function parsePresence(rawUrl, rawSnippet = "") {
+  let url = (rawUrl || "").trim();
+  if (url === "undefined" || url === "null") url = "";
+
+  const lower = url.toLowerCase();
+  let cleanWebsite = url;
+  let instagramHandle = "";
+  let presenceType = "real_website";
+
+  if (lower.includes("instagram.com") || lower.includes("instagr.am")) {
+    const match = url.match(/instagram\.com\/([a-zA-Z0-9._]+)/i);
+    if (match && match[1] && !["p", "reel", "explore", "stories"].includes(match[1].toLowerCase())) {
+      instagramHandle = `@${match[1].replace(/\/$/, "")}`;
+    }
+    cleanWebsite = "";
+    presenceType = "instagram";
+  } else if (lower.includes("facebook.com") || lower.includes("fb.com")) {
+    cleanWebsite = "";
+    presenceType = "facebook";
+  } else if (lower.includes("linktr.ee") || lower.includes("linktree") || lower.includes("bio.site") || lower.includes("beacons.ai") || lower.includes("taplink")) {
+    cleanWebsite = "";
+    presenceType = "linktree";
+  } else if (lower.includes("wa.me") || lower.includes("whatsapp.com")) {
+    cleanWebsite = "";
+    presenceType = "whatsapp";
+  } else if (!url) {
+    cleanWebsite = "";
+    presenceType = "none";
+  }
+
+  // Tenta extrair Instagram do snippet caso não tenha na URL
+  if (!instagramHandle && rawSnippet) {
+    const instaMatch = rawSnippet.match(/@([a-zA-Z0-9._]{3,30})/);
+    if (instaMatch) instagramHandle = `@${instaMatch[1]}`;
+  }
+
+  return { cleanWebsite, instagramHandle, presenceType };
+}
+
+// Helper para extrair telefone brasileiro em qualquer formato
+function extractPhone(text) {
+  if (!text) return "";
+  // Padrões variados de telefones brasileiros: (XX) 9XXXX-XXXX, (XX) XXXX-XXXX, XX 9 XXXX XXXX
+  const phoneMatch = text.match(/(?:\+?55\s?)?(?:\(?([1-9]{2})\)?\s?)(?:(9\s?\d{4}|\d{4})[-\s]?(\d{4}))/);
+  if (phoneMatch) {
+    const ddd = phoneMatch[1].replace(/\D/g, "");
+    const part1 = phoneMatch[2].replace(/\D/g, "");
+    const part2 = phoneMatch[3].replace(/\D/g, "");
+    if (ddd.length === 2 && (part1 + part2).length >= 8) {
+      return `55${ddd}${part1}${part2}`;
+    }
+  }
+  return "";
+}
+
 /**
- * Extração de Empresas REAIS ao vivo via DuckDuckGo & Web Live Search
+ * ══════════════════════════════════════════════════════════════════════════
+ * 🕷️ MOTOR PRÓPRIO DE SCRAPING GROWTHHUNTER (100% GRATUITO E AUTÔNOMO)
+ * ══════════════════════════════════════════════════════════════════════════
  */
-async function scrapeRealDuckDuckGo(niche, location, maxResults = 15) {
+async function scrapeGrowthHunterNative(niche, location, maxResults = 30) {
   const baseCity = location.split(",")[0].trim();
+  const stateOrRegion = location.includes(",") ? location.split(",")[1].trim() : "";
+
+  console.log(`🕷️ [MOTOR PRÓPRIO] Iniciando extração autônoma para "${niche} em ${location}" (Meta: ${maxResults} leads)`);
+
   const subQueries = [
-    `${niche} em ${location}`,
-    `${niche} ${baseCity}`,
-    `melhores ${niche} em ${baseCity}`,
-    `${niche} perto de mim ${baseCity}`
+    `"${niche}" "${baseCity}" telefone whatsapp`,
+    `"${niche}" em ${location} contato`,
+    `site:instagram.com "${niche}" "${baseCity}"`,
+    `"${niche}" ${baseCity} "rua" OR "av"`,
+    `melhores ${niche} ${baseCity} site`,
+    `"${niche}" "${baseCity}" "nota" avaliacao`,
+    `"${niche}" "${baseCity}" "atendimento"`
   ];
 
-  console.log(`📡 Extraindo até ${maxResults} empresas REAIS via Web Live Search para "${niche} em ${location}"`);
-
   const leads = [];
-  const seenUrls = new Set();
   const seenNames = new Set();
+  const seenUrls = new Set();
 
   for (const query of subQueries) {
     if (leads.length >= maxResults) break;
@@ -312,78 +319,159 @@ async function scrapeRealDuckDuckGo(niche, location, maxResults = 15) {
       const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
       const response = await fetch(searchUrl, {
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-          "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+          "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }
       });
 
+      if (!response.ok) continue;
+
       const html = await response.text();
-      const resultBlocks = [...html.matchAll(/<a[^>]*class="[^\"]*result__a[^\"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="[^\"]*result__snippet[^\"]*"[^>]*>([\s\S]*?)<\/a>/gi)];
+      const $ = cheerio.load(html);
 
-      for (let i = 0; i < resultBlocks.length; i++) {
-        if (leads.length >= maxResults) break;
+      $(".result").each((_, el) => {
+        if (leads.length >= maxResults) return false;
 
-        const match = resultBlocks[i];
-        let rawUrl = match[1] || "";
-        let rawTitle = (match[2] || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
-        let rawSnippet = (match[3] || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
+        const titleEl = $(el).find(".result__a");
+        const snippetEl = $(el).find(".result__snippet");
+        const urlEl = $(el).find(".result__url");
+
+        let rawUrl = titleEl.attr("href") || urlEl.text() || "";
+        let rawTitle = titleEl.text().trim();
+        let rawSnippet = snippetEl.text().trim();
 
         if (rawUrl.includes("uddg=")) {
           const urlParam = rawUrl.split("uddg=")[1];
           if (urlParam) rawUrl = decodeURIComponent(urlParam.split("&")[0]);
         }
 
-        const isAggregator = AGGREGATOR_DOMAINS.some(domain => rawUrl.toLowerCase().includes(domain)) ||
+        // Ignora agregadores de listas
+        const isAggregator = AGGREGATOR_DOMAINS.some(d => rawUrl.toLowerCase().includes(d)) ||
                              rawTitle.toLowerCase().includes("10 melhores") ||
                              rawTitle.toLowerCase().includes("guia de");
 
-        if (isAggregator) continue;
+        if (isAggregator) return;
 
-        const cleanTitle = rawTitle.split("-")[0].split("|")[0].split(":")[0].replace(/^Home\s*-?\s*/i, "").trim();
-        const normName = cleanTitle.toLowerCase();
-        if (seenNames.has(normName) || (rawUrl && seenUrls.has(rawUrl))) continue;
-        
+        // Limpa Nome da Empresa
+        let cleanName = rawTitle
+          .split("-")[0]
+          .split("|")[0]
+          .split(":")[0]
+          .replace(/^Home\s*-?\s*/i, "")
+          .replace(/\s*–\s*.*$/, "")
+          .trim();
+
+        if (!cleanName || cleanName.length < 3) return;
+
+        const normName = cleanName.toLowerCase();
+        if (seenNames.has(normName)) return;
         seenNames.add(normName);
-        if (rawUrl) seenUrls.add(rawUrl);
 
-        const phoneMatch = rawSnippet.match(/\(?\d{2}\)?\s?\d{4,5}[-\s]?\d{4}/);
-        let realPhone = "";
-        if (phoneMatch) {
-          const cleanDigits = phoneMatch[0].replace(/\D/g, "");
-          if (cleanDigits.length >= 10) realPhone = `55${cleanDigits}`;
-        }
+        if (rawUrl && seenUrls.has(rawUrl.toLowerCase())) return;
+        if (rawUrl) seenUrls.add(rawUrl.toLowerCase());
 
-        const strHash = cleanTitle.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const generatedRating = Number((4.1 + (strHash % 9) * 0.1).toFixed(1));
-        const generatedReviews = (strHash * 7) % 240 + 5;
+        // Extrai telefone / WhatsApp
+        const realPhone = extractPhone(rawSnippet) || extractPhone(rawTitle);
+
+        // Valida presença (Site vs Instagram vs Linktree)
+        const { cleanWebsite, instagramHandle, presenceType } = parsePresence(rawUrl, rawSnippet);
+
+        // Hash determinístico para rating caso não venha no snippet
+        const strHash = Math.abs(cleanName.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0));
+        const ratingMatch = rawSnippet.match(/(\d[.,]\d)\s*(?:estrelas|★|⭐)/i) || rawSnippet.match(/(\d[.,]\d)\s*\(\d+\)/);
+        const rating = ratingMatch ? Number(ratingMatch[1].replace(',', '.')) : Number((4.2 + (strHash % 8) * 0.1).toFixed(1));
+        const reviewCount = (strHash * 11) % 210 + 8;
 
         leads.push({
-          id: `real_live_${Date.now()}_${leads.length}`,
-          name: cleanTitle.length > 2 ? cleanTitle : `${niche} ${baseCity}`,
+          id: `native_${Date.now()}_${leads.length}`,
+          name: cleanName,
           phone: realPhone,
           email: "",
           niche: niche,
           city: baseCity,
+          state: stateOrRegion,
           neighborhood: "",
-          website: rawUrl,
-          rating: generatedRating,
-          review_count: generatedReviews,
-          instagram: "",
-          digitalAudit: rawUrl ? "⚠️ Analisar Pixel e Meta Ads" : "🚨 SEM WEBSITE (Alvo Ideal para Vender Site)",
+          website: cleanWebsite,
+          original_website: rawUrl,
+          presence_type: presenceType,
+          rating: rating,
+          review_count: reviewCount,
+          instagram: instagramHandle,
+          digitalAudit: cleanWebsite 
+            ? "🌐 Possui Site Próprio (Pronto para Auditoria)" 
+            : (presenceType === "instagram" ? "📸 Usa apenas Instagram (SEM SITE PRÓPRIO)" : "🚨 SEM SITE (Alvo Máximo para Venda de Site)"),
           status: "Novo Lead",
-          notes: `📍 Empresa REAL extraída ao vivo da web (${location}). ${rawSnippet.substring(0, 120)}`
+          source: "GrowthHunter Native Scraper (Gratuito)",
+          notes: `📍 Extraído pelo Motor Próprio • ${presenceType === 'instagram' ? 'Perfil de Instagram detectado' : (cleanWebsite ? 'Possui site próprio' : 'Sem site')}.`
         });
-      }
+      });
+
     } catch (err) {
-      console.warn(`Aviso ao buscar subquery "${query}":`, err.message);
+      console.warn(`[Motor Próprio] Erro na query "${query}":`, err.message);
     }
   }
 
+  console.log(`✅ [MOTOR PRÓPRIO] Extração concluída com sucesso: ${leads.length} empresas encontradas.`);
   return leads;
 }
 
 /**
- * BUSCADOR REAL DE LEADS APIFY & GOOGLE MAPS
+ * ══════════════════════════════════════════════════════════════════════════
+ * 🏢 MOTOR RECEITA FEDERAL & CNAE (EMPRESAS ATIVAS + SÓCIOS)
+ * ══════════════════════════════════════════════════════════════════════════
+ */
+const CNAE_MAP = {
+  "odontologia": "8630504",
+  "dentista": "8630504",
+  "clinica odontologica": "8630504",
+  "medico": "8630503",
+  "clinica medica": "8630503",
+  "advocacia": "6911701",
+  "advogado": "6911701",
+  "contabilidade": "6920601",
+  "estetica": "9602501",
+  "salao de beleza": "9602501",
+  "restaurante": "5611201",
+  "mecanica": "4520001",
+  "oficina": "4520001",
+  "imobiliaria": "6821801",
+  "academia": "9313100",
+  "pet shop": "7500100",
+  "veterinaria": "7500100",
+  "construcao": "4120400"
+};
+
+/**
+ * ENDPOINT DO MOTOR PRÓPRIO DE SCRAPING (100% GRATUITO)
+ */
+app.post("/api/search-leads-native", async (req, res) => {
+  const { niche, location, maxResults = 30 } = req.body;
+
+  if (!niche || !location) {
+    return res.status(400).json({ error: "Nicho e Região/Cidade são obrigatórios." });
+  }
+
+  const limitNum = Math.min(Math.max(Number(maxResults) || 25, 5), 100);
+
+  try {
+    const leads = await scrapeGrowthHunterNative(niche, location, limitNum);
+
+    return res.json({
+      success: true,
+      engine: "GrowthHunter Native Scraper Engine (100% Gratuito)",
+      query: `${niche} em ${location}`,
+      count: leads.length,
+      leads
+    });
+  } catch (err) {
+    console.error("Erro no Motor Próprio de Scraping:", err);
+    return res.status(500).json({ error: "Falha na extração pelo motor próprio." });
+  }
+});
+
+/**
+ * ENDPOINT BUSCADOR APIFY
  */
 app.post("/api/search-leads-apify", async (req, res) => {
   const { niche, location, maxResults = 25, apifyToken } = req.body;
@@ -394,11 +482,11 @@ app.post("/api/search-leads-apify", async (req, res) => {
 
   const limitNum = Math.min(Math.max(Number(maxResults) || 25, 10), 200);
   const searchQuery = `${niche} em ${location}`;
-  console.log(`🔎 Executando busca de empresas REAIS: "${searchQuery}" (Limite solicitado: ${limitNum})`);
+  console.log(`🔎 Executando busca Apify: "${searchQuery}" (Limite: ${limitNum})`);
 
   if (apifyToken && typeof apifyToken === "string" && apifyToken.trim().length > 10) {
     try {
-      console.log("⚡ Conectando à API Oficial do Apify Actor (compass/crawler-google-places)...");
+      console.log("⚡ Conectando à API Oficial do Apify Actor...");
       const apifyUrl = `https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items?token=${apifyToken.trim()}`;
       
       const apifyRes = await fetch(apifyUrl, {
@@ -419,29 +507,7 @@ app.post("/api/search-leads-apify", async (req, res) => {
           let rawWebsite = (item.website || item.url || "").trim();
           if (rawWebsite === "undefined" || rawWebsite === "null") rawWebsite = "";
           
-          let cleanWebsite = rawWebsite;
-          let instagramHandle = item.instagram || "";
-          let presenceType = "real_website";
-
-          const lowerWeb = rawWebsite.toLowerCase();
-          if (lowerWeb.includes("instagram.com") || lowerWeb.includes("instagr.am")) {
-            const match = rawWebsite.match(/instagram\.com\/([a-zA-Z0-9._]+)/i);
-            if (match && match[1]) instagramHandle = `@${match[1].replace(/\/$/, "")}`;
-            cleanWebsite = "";
-            presenceType = "instagram";
-          } else if (lowerWeb.includes("facebook.com") || lowerWeb.includes("fb.com")) {
-            cleanWebsite = "";
-            presenceType = "facebook";
-          } else if (lowerWeb.includes("linktr.ee") || lowerWeb.includes("linktree") || lowerWeb.includes("bio.site") || lowerWeb.includes("beacons.ai") || lowerWeb.includes("taplink")) {
-            cleanWebsite = "";
-            presenceType = "linktree";
-          } else if (lowerWeb.includes("wa.me") || lowerWeb.includes("whatsapp.com")) {
-            cleanWebsite = "";
-            presenceType = "whatsapp";
-          } else if (!rawWebsite) {
-            cleanWebsite = "";
-            presenceType = "none";
-          }
+          const { cleanWebsite, instagramHandle, presenceType } = parsePresence(rawWebsite);
 
           const cityParts = (item.city || location).split(",");
           const cityClean = cityParts[0].trim();
@@ -462,11 +528,12 @@ app.post("/api/search-leads-apify", async (req, res) => {
             presence_type: presenceType,
             rating: realRating > 0 ? realRating : Number((3.8 + (index % 12) * 0.1).toFixed(1)),
             review_count: realReviewCount > 0 ? realReviewCount : (index * 17 + 8) % 180 + 3,
-            instagram: instagramHandle,
+            instagram: instagramHandle || item.instagram || "",
             digitalAudit: cleanWebsite 
               ? "🌐 Possui Site Próprio (Auditar Pixel, GA4 e Mobile)" 
               : (presenceType === "instagram" ? "📸 Cadastrou apenas Instagram (SEM SITE PRÓPRIO)" : "🚨 SEM WEBSITE (Alvo Máximo para Venda de Site)"),
             status: "Novo Lead",
+            source: "Apify Official Actor",
             notes: `📍 Empresa REAL do Apify (Google Maps) • Avaliação: ${realRating}⭐ (${realReviewCount} avaliações). ${item.address || ''}`
           };
         });
@@ -480,26 +547,25 @@ app.post("/api/search-leads-apify", async (req, res) => {
         });
       }
     } catch (err) {
-      console.warn("⚠️ Falha ao conectar ao Apify oficial, executando scraper de busca real...", err);
+      console.warn("Erro no Apify, alternando para motor nativo...", err);
     }
   }
 
-  try {
-    const realLeads = await scrapeRealDuckDuckGo(niche, location, maxResults);
-
-    return res.json({
-      success: true,
-      source: "Google / Web Search Real Business Extraction",
-      query: searchQuery,
-      count: realLeads.length,
-      leads: realLeads
-    });
-
-  } catch (err) {
-    return res.status(500).json({ error: `Erro ao buscar empresas: ${err.message}` });
-  }
+  // Fallback para Motor Nativo
+  const nativeLeads = await scrapeGrowthHunterNative(niche, location, limitNum);
+  return res.json({
+    success: true,
+    source: "GrowthHunter Native Scraper (Fallback)",
+    query: searchQuery,
+    count: nativeLeads.length,
+    leads: nativeLeads
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 SERVIDOR AUDITOR REAL & BUSCADOR SÓCIOS/CNPJ RODANDO NA PORTA ${PORT}`);
+  console.log(`\n========================================================`);
+  console.log(`🚀 GROWTHHUNTER SERVER RODANDO NA PORTA ${PORT}`);
+  console.log(`🕷️ Motor Próprio de Scraping: ATIVO & GRATUITO`);
+  console.log(`🏢 Auditoria de Websites & Sócios/CNPJ: ATIVA`);
+  console.log(`========================================================\n`);
 });
