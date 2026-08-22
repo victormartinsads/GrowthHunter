@@ -11,7 +11,8 @@ export default function CompanyDatabaseView({
   onSelectCompany, 
   onOpenEditModal, 
   onOpenEmailModal, 
-  onDeleteBatch 
+  onDeleteBatch,
+  onBatchUpdatePipelineStage
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNiche, setSelectedNiche] = useState("TODOS");
@@ -99,7 +100,20 @@ export default function CompanyDatabaseView({
             </h2>
           </div>
 
-          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+            {selectedIds.length > 0 && onBatchUpdatePipelineStage && (
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  onBatchUpdatePipelineStage(selectedIds, "QUALIFIED");
+                  setSelectedIds([]);
+                }} 
+                style={{ fontSize: "0.82rem", background: "#ea580c", borderColor: "#c2410c" }}
+              >
+                <span>🚀 Mover para o Kanban ({selectedIds.length})</span>
+              </button>
+            )}
+
             <button className="btn-secondary" onClick={exportCsv} style={{ fontSize: "0.82rem" }}>
               <Download size={15} />
               <span>Exportar CSV</span>

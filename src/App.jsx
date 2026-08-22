@@ -158,6 +158,21 @@ export default function App() {
     showToast("📋 Estágio do CRM atualizado!", "success");
   };
 
+  // ── Atualizar Múltiplas Empresas para um Estágio do Kanban ──
+  const handleBatchUpdatePipelineStage = async (companyIds, newStageId = "QUALIFIED") => {
+    if (!companyIds || companyIds.length === 0) return;
+    
+    setCompanies(prev => prev.map(c =>
+      companyIds.includes(c.id) ? { ...c, pipeline_stage: newStageId, status: newStageId } : c
+    ));
+
+    await Promise.all(
+      companyIds.map(id => updateCompany(id, { pipeline_stage: newStageId, status: newStageId }))
+    );
+
+    showToast(`🎯 ${companyIds.length} empresa(s) movidas para o Kanban (${newStageId})!`, "success", 4000);
+  };
+
   // ── Atualizar Empresa ──
   const handleSaveCompany = async (updatedCompany) => {
     const reProcessed = processAndEnrichCompany(updatedCompany);
@@ -226,6 +241,8 @@ export default function App() {
             companies={companies}
             onSelectCompany={(comp) => setSelectedCompanyForProfile(comp)}
             onUpdatePipelineStage={handleUpdatePipelineStage}
+            onBatchUpdatePipelineStage={handleBatchUpdatePipelineStage}
+            onNavigateTab={setActiveTab}
             onOpenEmailModal={(comp) => { setEmailTargetCompany(comp); setIsEmailModalOpen(true); }}
             onOpenApifyModal={() => setIsApifyModalOpen(true)}
           />
@@ -256,6 +273,7 @@ export default function App() {
             onOpenEditModal={(comp) => { setEditingCompany(comp); setIsEditModalOpen(true); }}
             onOpenEmailModal={(comp) => { setEmailTargetCompany(comp); setIsEmailModalOpen(true); }}
             onDeleteBatch={handleDeleteBatch}
+            onBatchUpdatePipelineStage={handleBatchUpdatePipelineStage}
           />
         )}
 
