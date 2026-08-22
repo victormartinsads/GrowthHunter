@@ -291,70 +291,92 @@ const AGGREGATOR_DOMAINS = [
  * Extração de Empresas REAIS ao vivo via DuckDuckGo & Web Live Search
  */
 async function scrapeRealDuckDuckGo(niche, location, maxResults = 15) {
-  const query = `${niche} em ${location}`;
-  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  const baseCity = location.split(",")[0].trim();
+  const subQueries = [
+    `${niche} em ${location}`,
+    `${niche} ${baseCity}`,
+    `melhores ${niche} em ${baseCity}`,
+    `${niche} perto de mim ${baseCity}`
+  ];
 
-  console.log(`📡 Extraindo empresas REAIS via DuckDuckGo Live Search: "${query}"`);
+  console.log(`📡 Extraindo até ${maxResults} empresas REAIS via Web Live Search para "${niche} em ${location}"`);
 
-  const response = await fetch(searchUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"
-    }
-  });
-
-  const html = await response.text();
   const leads = [];
+  const seenUrls = new Set();
+  const seenNames = new Set();
 
-  const resultBlocks = [...html.matchAll(/<a[^>]*class="[^\"]*result__a[^\"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="[^\"]*result__snippet[^\"]*"[^>]*>([\s\S]*?)<\/a>/gi)];
-
-  for (let i = 0; i < resultBlocks.length; i++) {
+  for (const query of subQueries) {
     if (leads.length >= maxResults) break;
 
-    const match = resultBlocks[i];
-    let rawUrl = match[1] || "";
-    let rawTitle = (match[2] || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
-    let rawSnippet = (match[3] || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
+    try {
+      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      const response = await fetch(searchUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"
+        }
+      });
 
-    if (rawUrl.includes("uddg=")) {
-      const urlParam = rawUrl.split("uddg=")[1];
-      if (urlParam) rawUrl = decodeURIComponent(urlParam.split("&")[0]);
+      const html = await response.text();
+      const resultBlocks = [...html.matchAll(/<a[^>]*class="[^\"]*result__a[^\"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="[^\"]*result__snippet[^\"]*"[^>]*>([\s\S]*?)<\/a>/gi)];
+
+      for (let i = 0; i < resultBlocks.length; i++) {
+        if (leads.length >= maxResults) break;
+
+        const match = resultBlocks[i];
+        let rawUrl = match[1] || "";
+        let rawTitle = (match[2] || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
+        let rawSnippet = (match[3] || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
+
+        if (rawUrl.includes("uddg=")) {
+          const urlParam = rawUrl.split("uddg=")[1];
+          if (urlParam) rawUrl = decodeURIComponent(urlParam.split("&")[0]);
+        }
+
+        const isAggregator = AGGREGATOR_DOMAINS.some(domain => rawUrl.toLowerCase().includes(domain)) ||
+                             rawTitle.toLowerCase().includes("10 melhores") ||
+                             rawTitle.toLowerCase().includes("guia de");
+
+        if (isAggregator) continue;
+
+        const cleanTitle = rawTitle.split("-")[0].split("|")[0].split(":")[0].replace(/^Home\s*-?\s*/i, "").trim();
+        const normName = cleanTitle.toLowerCase();
+        if (seenNames.has(normName) || (rawUrl && seenUrls.has(rawUrl))) continue;
+        
+        seenNames.add(normName);
+        if (rawUrl) seenUrls.add(rawUrl);
+
+        const phoneMatch = rawSnippet.match(/\(?\d{2}\)?\s?\d{4,5}[-\s]?\d{4}/);
+        let realPhone = "";
+        if (phoneMatch) {
+          const cleanDigits = phoneMatch[0].replace(/\D/g, "");
+          if (cleanDigits.length >= 10) realPhone = `55${cleanDigits}`;
+        }
+
+        const strHash = cleanTitle.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const generatedRating = Number((4.1 + (strHash % 9) * 0.1).toFixed(1));
+        const generatedReviews = (strHash * 7) % 240 + 5;
+
+        leads.push({
+          id: `real_live_${Date.now()}_${leads.length}`,
+          name: cleanTitle.length > 2 ? cleanTitle : `${niche} ${baseCity}`,
+          phone: realPhone,
+          email: "",
+          niche: niche,
+          city: baseCity,
+          neighborhood: "",
+          website: rawUrl,
+          rating: generatedRating,
+          review_count: generatedReviews,
+          instagram: "",
+          digitalAudit: rawUrl ? "⚠️ Analisar Pixel e Meta Ads" : "🚨 SEM WEBSITE (Alvo Ideal para Vender Site)",
+          status: "Novo Lead",
+          notes: `📍 Empresa REAL extraída ao vivo da web (${location}). ${rawSnippet.substring(0, 120)}`
+        });
+      }
+    } catch (err) {
+      console.warn(`Aviso ao buscar subquery "${query}":`, err.message);
     }
-
-    const isAggregator = AGGREGATOR_DOMAINS.some(domain => rawUrl.toLowerCase().includes(domain)) ||
-                         rawTitle.toLowerCase().includes("10 melhores") ||
-                         rawTitle.toLowerCase().includes("guia de");
-
-    if (isAggregator) continue;
-
-    const phoneMatch = rawSnippet.match(/\(?\d{2}\)?\s?\d{4,5}[-\s]?\d{4}/);
-    let realPhone = "";
-    if (phoneMatch) {
-      const cleanDigits = phoneMatch[0].replace(/\D/g, "");
-      if (cleanDigits.length >= 10) realPhone = `55${cleanDigits}`;
-    }
-
-    const cleanTitle = rawTitle.split("-")[0].split("|")[0].split(":")[0].replace(/^Home\s*-?\s*/i, "").trim();
-    const strHash = cleanTitle.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const generatedRating = Number((4.1 + (strHash % 9) * 0.1).toFixed(1));
-    const generatedReviews = (strHash * 7) % 240 + 5;
-
-    leads.push({
-      id: `real_live_${Date.now()}_${i}`,
-      name: cleanTitle.length > 2 ? cleanTitle : `${niche} ${location.split(",")[0]}`,
-      phone: realPhone,
-      email: "",
-      niche: niche,
-      city: location.split(",")[0].trim(),
-      neighborhood: "",
-      website: rawUrl,
-      rating: generatedRating,
-      review_count: generatedReviews,
-      instagram: "",
-      digitalAudit: rawUrl ? "⚠️ Analisar Pixel e Meta Ads" : "🚨 SEM WEBSITE (Alvo Ideal para Vender Site)",
-      status: "Novo Lead",
-      notes: `📍 Empresa REAL extraída ao vivo da web (${location}). ${rawSnippet.substring(0, 120)}`
-    });
   }
 
   return leads;
@@ -364,14 +386,15 @@ async function scrapeRealDuckDuckGo(niche, location, maxResults = 15) {
  * BUSCADOR REAL DE LEADS APIFY & GOOGLE MAPS
  */
 app.post("/api/search-leads-apify", async (req, res) => {
-  const { niche, location, maxResults = 15, apifyToken } = req.body;
+  const { niche, location, maxResults = 25, apifyToken } = req.body;
 
   if (!niche || !location) {
     return res.status(400).json({ error: "Nicho e Região/Cidade são obrigatórios." });
   }
 
+  const limitNum = Math.min(Math.max(Number(maxResults) || 25, 10), 200);
   const searchQuery = `${niche} em ${location}`;
-  console.log(`🔎 Executando busca de empresas REAIS: "${searchQuery}" (Limite: ${maxResults})`);
+  console.log(`🔎 Executando busca de empresas REAIS: "${searchQuery}" (Limite solicitado: ${limitNum})`);
 
   if (apifyToken && typeof apifyToken === "string" && apifyToken.trim().length > 10) {
     try {
@@ -383,7 +406,7 @@ app.post("/api/search-leads-apify", async (req, res) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           searchStringsArray: [searchQuery],
-          maxCrawledPlaces: Math.min(Number(maxResults) || 15, 50),
+          maxCrawledPlaces: limitNum,
           language: "pt-BR"
         })
       });

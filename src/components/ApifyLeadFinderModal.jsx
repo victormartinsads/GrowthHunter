@@ -140,19 +140,19 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
                 value={maxResults}
                 onChange={(e) => setMaxResults(Number(e.target.value))}
               >
-                <option value={15}>15 Leads</option>
                 <option value={25}>25 Leads</option>
                 <option value={50}>50 Leads</option>
                 <option value={100}>100 Leads</option>
+                <option value={200}>200 Leads</option>
               </select>
             </div>
 
             <div>
               <label style={{ fontSize: "0.8rem", color: "#78716c", marginBottom: "4px", display: "block" }}>
-                Token Apify Configurado:
+                Token Apify (Opcional se salvo no Supabase):
               </label>
               <input 
-                className="glass-input"
+                className="glass-input" 
                 type="password"
                 placeholder="apify_api_..."
                 style={{ width: "100%", fontSize: "0.88rem" }}
@@ -160,6 +160,10 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
                 onChange={(e) => setApifyToken(e.target.value)}
               />
             </div>
+          </div>
+
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "0.75rem", borderRadius: "6px", fontSize: "0.78rem", color: "#64748b", lineHeight: 1.4 }}>
+            💡 <strong>Dica de Volume:</strong> O GrowthHunter acumula leads com <em>deduplicação automática</em>. Você pode fazer múltiplas buscas por diferentes bairros ou nichos semelhantes (ex: "Zona Sul", "Centro", "Zona Leste") que as novas empresas serão adicionadas sem duplicar as existentes.
           </div>
 
           {errorMsg && (
