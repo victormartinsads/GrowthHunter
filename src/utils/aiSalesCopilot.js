@@ -37,41 +37,49 @@ export const generateCopilotReplySuggestion = (lastMessageText = "", company = {
   const companyName = company.name || "empresa";
   const hasWebsite = Boolean(company.website && String(company.website).trim() !== "");
 
-  // Framework SDR: Investigação e Pergunta de Micro-CTA em vez de confrontação
+  // Respostas 100% Humanas (Metodologia Prospectagram + Gabriel Miranda)
   if (objection.id === "PRICE") {
     return {
       objection,
-      suggestedReply: `Entendi! Quando você comenta sobre valor, é em relação ao orçamento disponível no momento ou ao retorno esperado com novos clientes?`
+      suggestedReply: `Cara, sem estresse! Uma página rápida pra receber orçamento no WhatsApp fica em torno de R$ 1.500 a R$ 2.500 parcela única, sem mensalidade presa. Quer que eu te mande um print do modelo pra ver se faz sentido pro seu caso?`
     };
   }
   if (objection.id === "NO_INTEREST") {
     return {
       objection,
-      suggestedReply: `Tranquilo! Só para eu não insistir no assunto errado: hoje vocês já captam clientes do Google de outra forma ou essa expansão simplesmente não é uma prioridade agora?`
+      suggestedReply: `Tranquilo, sem crise nenhuma! É porque vocês já tão com a agenda cheia por aí ou porque já tiveram alguma experiência ruim antes?`
     };
   }
   if (objection.id === "NEED_MORE_INFO") {
     return {
       objection,
-      suggestedReply: `Com certeza! Para eu te mandar algo realmente relevante sobre a ${companyName}: o que pesa mais para vocês nessa área hoje — ter mais contatos no WhatsApp ou um site mais rápido?`
+      suggestedReply: `Mando sim! Só me diz uma coisa rápida pra eu te mandar o que for mais certeiro: hoje o foco de vocês seria aparecer no Google pra quem busca na cidade ou passar mais autoridade pra quem já chega no Whats?`
     };
   }
   if (objection.id === "COMPETITOR") {
     return {
       objection,
-      suggestedReply: `Perfeito! E vocês estão 100% satisfeitos com a taxa de conversão e a velocidade de carregamento do site atual no celular?`
+      suggestedReply: `Ah que massa! E eles tão conseguindo colocar vocês no topo do Google quando alguém pesquisa na cidade, ou tão mais cuidando das postagens de Instagram?`
     };
   }
   if (objection.id === "TIMING") {
     return {
       objection,
-      suggestedReply: `Sem problemas! É porque essa captação não é prioridade agora ou vocês estão em outro momento da operação?`
+      suggestedReply: `Com certeza, imagino a correria! Qual seria um dia mais tranquilo pra gente trocar 5 minutinhos — na terça ou na quinta que vem?`
+    };
+  }
+  if (objection.id === "AUTHORITY") {
+    return {
+      objection,
+      suggestedReply: `Show de bola! Quer que eu te mande o print do rascunho pra você mostrar pra ele? Fica bem mais fácil de visualizar como ficaria no celular.`
     };
   }
 
   return {
-    objection,
-    suggestedReply: `Olá! Entendi o seu ponto. Analisando a presença da ${companyName}, notamos ótimas oportunidades para potencializar os contatos via WhatsApp. Faz sentido conversarmos em 5 minutos nesta semana?`
+    objection: OBJECTION_TYPES.UNKNOWN,
+    suggestedReply: hasWebsite
+      ? `Show! Posso te mandar um videozinho rápido de 40s mostrando exatamente onde dá pra melhorar a conversão do site de vocês?`
+      : `Legal! Quer que eu te mande um print do modelo de página que rascunhei pra ${companyName} no WhatsApp?`
   };
 };
 

@@ -1,149 +1,148 @@
 import { normalizeSegment } from "./segmentClassifier";
 
 /**
- * GrowthHunter — AGENTE SDR: ESPECIALISTA EM PROSPECÇÃO ESTRATÉGICA
- * Implementa o framework SDR Sênior de inteligência comercial, copywriting e qualificação de leads.
+ * GrowthHunter — GERADOR DE SCRIPTS HUMANOS REAIS (MÉTODO PROSPECTAGRAM + GABRIEL MIRANDA)
+ * Zero linguagem corporativa/robótica.
+ * Foco em: Quebra de padrão, observação sincera, micro-CTA de 1 linha, demonstração rápida (vídeo/print).
  */
 
 export const SDR_AGENT_SYSTEM_PROMPT = `
-You are a Senior SDR Agent specialized in strategic B2B outbound prospecting, commercial intelligence, and lead qualification.
-Logic: EMPRESA → OFERTA → ICP → PROSPECT → CONTEXTO → HIPÓTESE DE DOR → ÂNGULO → MENSAGEM → CONVERSA → QUALIFICAÇÃO → REUNIÃO.
-Rules:
-- Never sell aggressively on the first touch. Start a relevant conversation.
-- Use Micro-CTAs that are easy to answer ("Isso acontece aí também?").
-- Structure outputs into DIAGNÓSTICO, ESTRATÉGIA, SCRIPT, OBJEÇÕES, QUALIFICAÇÃO, PRÓXIMO PASSO.
+Você é um especialista em prospecção ativa humana no WhatsApp e Ligação para negócios locais.
+Regras fundamentais:
+- ZERO linguagem corporativa ("somos uma agência 360", "soluções de ponta a ponta").
+- Mensagens curtas de 1 a 3 linhas no WhatsApp, como uma pessoa normal conversando.
+- Sempre use um gancho visual concreto (ex: "vi vocês no Maps", "montei um rascunho rápido no celular", "gravei 30s da tela").
+- Perguntas fáceis e leves de responder.
 `;
 
 export const generateAiLeadAnalysis = (company, scores, techResults, websiteScore) => {
-  const name = company.name || "Empresa";
-  const city = company.city || "sua região";
+  const name = (company.name || "Empresa").replace(/\s*-\s*.*$/, "").trim();
+  const city = company.city || "sua cidade";
   const niche = normalizeSegment(company.niche || company.category);
   const rating = company.rating || 4.8;
-  const reviewCount = company.review_count || company.reviewsCount || 45;
+  const reviewCount = company.review_count || company.reviewsCount || 40;
   const hasWebsite = Boolean(company.website && String(company.website).trim() !== "");
+  const websiteUrl = company.website ? company.website.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] : "";
 
-  // 1. DIAGNÓSTICO E HIPÓTESE DE DOR
+  // 1. DIAGNÓSTICO PRÁTICO (EM PORTUGUÊS CLARO)
   const mainProblem = !hasWebsite
-    ? `Ausência de presença web oficial. A ${name} tem forte prova social local (${rating} ⭐ com ${reviewCount} avaliações no Google Maps), porém perde 100% das buscas de alta intenção na região por não ter uma Landing Page de conversão.`
+    ? `A ${name} é bem avaliada no Maps (${rating} ⭐ com ${reviewCount} avaliações), mas quem pesquisa por ${niche} no Google cai direto no site dos concorrentes porque vocês não têm página própria cadastrada.`
     : websiteScore.totalScore < 50
-    ? `Website com nota de experiência e performance crítica (${websiteScore.totalScore}/100). Visitantes do celular abandonam a página antes de chamar no WhatsApp.`
-    : `Presença web ativa, porém com rastreamento incompleto (Meta Pixel ou GA4 ausentes), dificultando a mensuração do retorno em anúncios patrocinados.`;
+    ? `O site da ${name} (${websiteUrl}) demora pra carregar no celular e dificulta o cliente chamar no WhatsApp de primeira.`
+    : `O site de vocês é bom, mas na pesquisa do Google por "${niche} em ${city}", apenas os concorrentes aparecem anunciando no topo.`;
 
   const commercialOpportunity = !hasWebsite
-    ? `Criação de Landing Page de Alta Conversão + Google Ads Local`
+    ? `Criação de Página de Vendas Rápida para WhatsApp`
     : websiteScore.totalScore < 50
-    ? `Reformulação de Website focado em Experiência Mobile & Conversão`
-    : `Otimização de Mensuração GA4/Pixel + Escala de Tráfego Pago`;
+    ? `Ajuste e Reformulação do Site no Celular`
+    : `Anúncios no Topo do Google (Google Ads)`;
 
-  // 2. ÂNGULO COMERCIAL (Valor primeiro, sem features)
-  const salesAngle = !hasWebsite
-    ? `A ${name} tem ${reviewCount} avaliações positivas no Google Maps — uma prova social forte em ${city}. Contudo, clientes que pesquisam por ${niche} na região não chegam ao WhatsApp da empresa porque ela não aparece nos resultados de busca com um site próprio.`
-    : websiteScore.totalScore < 50
-    ? `O site da ${name} existe, mas carrega lentamente no celular — o que faz visitantes irem embora antes de clicar no WhatsApp. A empresa perde orçamentos que já chegaram à porta digital.`
-    : `A ${name} tem um site bem estruturado em ${city}. A lacuna é que os concorrentes estão capturando os clientes de alta intenção de compra nos anúncios patrocinados do Google enquanto a ${name} não está presente nesse espaço.`;
-
-  // 3. ABERTURA (Curta, consultiva, um CTA de resposta fácil)
+  // 2. ABORDAGEM WHATSAPP — MÉTODO PROSPECTAGRAM / GABRIEL MIRANDA (100% HUMANA)
   const openingMessage = !hasWebsite
-    ? `Oi! Vi que a ${name} tem ${reviewCount} avaliações no Google Maps — uma reputação excelente em ${city}. 👏\n\nNotei que quando um cliente pesquisa por ${niche} na cidade, a empresa não aparece nos resultados do Google com um site próprio.\n\nHoje vocês recebem orçamentos de clientes que chegam pelo Google — ou vem tudo por indicação?`
+    ? `Opa, tudo bem? Vi a ${name} aqui no Google Maps em ${city}, muito bacana as avaliações de vocês! 👏\n\nFui procurar o site ou cardápio/serviços de vocês pra dar uma olhada e reparei que ainda não têm uma página cadastrada.\n\nHoje vocês pegam clientes que buscam no Google ou a demanda vem quase toda por indicação mesmo?`
     : websiteScore.totalScore < 50
-    ? `Oi! Acessei o site da ${name} (${company.website || "site de vocês"}) — vocês têm um bom negócio em ${city}.\n\nPercebi que o carregamento no celular está um pouco lento, o que pode estar reduzindo o número de pessoas que chegam ao WhatsApp de vocês.\n\nIsso é algo que vocês já tinham identificado ou ainda não estava no radar?`
-    : `Oi! Vi que a ${name} tem um site bem estruturado em ${city} — parabéns, isso é raro no segmento de ${niche}.\n\nNotei que quando os clientes pesquisam por "${niche} em ${city}" no Google, os anúncios patrocinados mostram apenas a concorrência.\n\nVocês estão veiculando campanhas de tráfego pago agora ou ainda não chegaram nessa frente?`;
+    ? `Fala pessoal da ${name}, tudo joia?\n\nDei uma olhada rápida no site de vocês (${websiteUrl}) pelo meu celular agora. Achei a empresa bem estruturada, mas vi que o botão de chamar no WhatsApp demorou um pouco pra carregar aqui.\n\nVocês já tinham percebido isso ou ninguém tinha avisado vocês ainda?`
+    : `Opa, tudo bem? Vi o site da ${name} aqui em ${city}, achei super caprichado!\n\nSó reparei que quando a gente pesquisa por "${niche} em ${city}" no Google, os anúncios do topo tão sendo todos da concorrência.\n\nVocês já chegaram a anunciar no Google pra trazer clientes pro Whats ou ainda não é o foco?`;
 
   const whatsappPitch = openingMessage;
 
-  // 4. E-MAIL FRIO (Assunto provocativo, corpo curto e escaneável)
+  // 3. SEGUNDO ÂNGULO: MÉTODO GABRIEL MIRANDA (DEMONSTRAÇÃO / VÍDEO PRONTO)
+  const visualDemoPitch = !hasWebsite
+    ? `Opa! Estava pesquisando empresas de ${niche} aqui em ${city} e vi a boa reputação da ${name}.\n\nComo vi que vocês não têm site próprio, montei um rascunho de 1 página no celular mostrando como ficaria a ${name} recebendo orçamentos no Whats direto do Google.\n\nQuer que eu te mande um print de 30s pra dar uma olhada sem compromisso?`
+    : `Opa! Gravei um videozinho rápido de 40 segundos na tela do meu celular mostrando exatamente o que tá travando o carregamento do site da ${name} e como destravar o botão do Whats.\n\nPosso te mandar o link por aqui pra vocês darem uma olhada?`;
+
+  // 4. E-MAIL DIRETO E SEM ENROLAÇÃO
   const emailPitch = {
     subject: !hasWebsite
-      ? `${name} aparece no Google quando o cliente procura?`
-      : websiteScore.totalScore < 50
-      ? `Diagnóstico rápido do site da ${name}`
-      : `A concorrência está capturando clientes que pesquisam "${niche} em ${city}"`,
+      ? `Dúvida rápida sobre a ${name} no Google (${city})`
+      : `Reparei um detalhe no site da ${name} (${websiteUrl})`,
     body: !hasWebsite
-      ? `Olá time da ${name},\n\nPesquisei por "${niche} em ${city}" no Google hoje — a ${name} tem ${reviewCount} avaliações excelentes no Maps, mas não possui uma página própria para receber quem pesquisa pelo serviço.\n\nClientes com intenção de compra imediata estão encontrando a concorrência, não vocês.\n\nTrabalhamos com Landing Pages de alta conversão que geram orçamentos direto no WhatsApp, sem depender de anúncios no início.\n\nEssa frente de captação é algo que vocês têm planejado?\n\nAtenciosamente,\n[Seu Nome] | [Sua Agência]`
-      : websiteScore.totalScore < 50
-      ? `Olá time da ${name},\n\nAcessei o site de vocês (${company.website || ""}) hoje — bom conteúdo, mas percebi que ele carrega lentamente no celular.\n\nO Google mostra que 53% dos visitantes abandonam um site que demora mais de 3 segundos para carregar — o que significa orçamentos que nunca chegam ao WhatsApp de vocês.\n\nReformulamos sites focando em velocidade mobile e conversão via WhatsApp. Essa melhoria é prioridade para a ${name} agora?\n\nAtenciosamente,\n[Seu Nome] | [Sua Agência]`
-      : `Olá time da ${name},\n\nMapeei as empresas mais bem estruturadas de ${niche} em ${city} — o site de vocês se destacou.\n\nO que percebi: ao pesquisar "${niche} em ${city}", a concorrência aparece nos anúncios patrocinados e captura os clientes de alta intenção de compra. A ${name} não está presente nesse espaço.\n\nGerenciamos campanhas de Google Ads + Meta Ads focadas em gerar orçamentos direto no WhatsApp. Investimento a partir de R$ 800/mês em mídia.\n\nEssa frente de captação é algo que vocês têm planejado?\n\nAtenciosamente,\n[Seu Nome] | [Sua Agência]`
+      ? `Oi pessoal da ${name}, tudo bem?\n\nVi que vocês têm ${reviewCount} avaliações muito boas no Google Maps em ${city}.\n\nPorém, quando alguém pesquisa por "${niche} em ${city}" no Google, vocês não aparecem com um site próprio para o cliente chamar no WhatsApp — e os concorrentes acabam pegando essas pessoas.\n\nNós montamos páginas rápidas e diretas focadas em gerar chamadas no WhatsApp.\n\nVocês têm interesse em ver um modelo de exemplo para a ${name} sem compromisso?\n\nAbraço,\n[Seu Nome]`
+      : `Oi time da ${name}, tudo joia?\n\nAcessei o site de vocês (${websiteUrl}) pelo celular e achei a proposta bem legal. Só notei que o tempo de abertura do botão do WhatsApp está um pouco lento no mobile, o que faz algumas pessoas desistirem antes de chamar.\n\nTrabalhamos com otimização rápida de sites locais para aumentar as mensagens no WhatsApp.\n\nQuer que eu te envie um diagnóstico de 2 minutos mostrando o que ajustar?\n\nAbraço,\n[Seu Nome]`
   };
 
-  // 5. SCRIPT DE LIGAÇÃO (Estruturado em 5 etapas)
+  // 5. SCRIPT DE LIGAÇÃO HUMANO (SEM ROTEIRO ROBÓTICO)
   const callScript = [
-    `1. Conexão: "Olá, falo com o responsável comercial da ${name}?"`,
-    `2. Observação concreta: "Mapeei as empresas de ${niche} mais bem avaliadas em ${city} — vi que vocês têm ${reviewCount} avaliações positivas no Google."`,
-    `3. Hipótese de dor: "${mainProblem}"`,
-    `4. Micro-CTA: "Isso é algo que vocês já identificaram por aí — ou não é uma prioridade no momento?"`,
-    `5. Avanço: "Faz sentido eu te mostrar em 5 minutos como resolvemos isso em operações similares?"`,
+    `1. Secretária/Atendente: "Opa, bom dia! Tudo bem? Por favor, consigo falar 1 minutinho com o responsável pela empresa ou dono?"`,
+    `2. Quando o Dono atender: "Opa ${name}, tudo joia? Te liguei rapidinho porque vi vocês no Google Maps com ${reviewCount} avaliações aqui em ${city} — excelente trabalho de vocês!"`,
+    `3. Observação: "${!hasWebsite ? 'Só reparei que vocês não têm um site próprio cadastrado e quem busca pelo serviço no Google acaba caindo nos concorrentes.' : 'Só dei uma olhada no site de vocês e vi que no celular ele tá demorando um pouco pra abrir o WhatsApp.'}"`,
+    `4. Pergunta leve: "Hoje vocês já têm alguém olhando essa parte ou tá parado por aí?"`,
+    `5. Fechamento leve: "Montei um rascunho/vídeo de 1 minuto mostrando como resolver. Posso te mandar no WhatsApp pra você dar uma olhada sem compromisso?"`
   ].join("\n");
 
-  // 6. SEQUÊNCIA DE FOLLOW-UP D0→D14 (5 touchpoints, um CTA por mensagem)
+  // 6. CADÊNCIA DE FOLLOW-UP HUMANA (MÉTODO PROSPECTAGRAM: MENSAGENS CURTAS + ÁUDIO)
   const followUpSequence = [
     {
-      day: "D0", title: "Primeiro Contato",
+      day: "D0", 
+      title: "1º Contato (WhatsApp Curto)",
       script: openingMessage
     },
     {
-      day: "D3", title: "Novo Ângulo com Dado",
-      script: !hasWebsite
-        ? `Oi! Só para contextualizar o que mencionei:\n\nToda semana, dezenas de pessoas em ${city} pesquisam por ${niche} no Google — 90% delas clicam apenas nos 3 primeiros resultados. Sem um site, a ${name} fica invisível para esses clientes prontos para contratar.\n\nFaz sentido olharmos isso juntos?`
-        : websiteScore.totalScore < 50
-        ? `Oi! Rodei um diagnóstico rápido no site de vocês.\n\nO tempo de carregamento no celular está mais lento do que o ideal. Pesquisas do Google mostram que sites lentos perdem até 53% dos visitantes antes de converter.\n\nPosso te mandar o relatório completo — vale 2 minutos de leitura?`
-        : `Oi! Contextualizando melhor:\n\nToda semana, pessoas em ${city} pesquisam por ${niche} com intenção de compra imediata. Quem aparece nos anúncios captura esse fluxo. A ${name} tem toda a estrutura para converter esses clientes — falta ativar esse canal.\n\nFaz sentido conversarmos?`
+      day: "D2", 
+      title: "Follow-up Rápido (Quebra de Gelo)",
+      script: `Opa, tudo bem? Conseguiu ver a mensagem que te mandei acima? 🙂`
     },
     {
-      day: "D7", title: "Prova Social / Estudo de Caso",
-      script: !hasWebsite
-        ? `Oi! Finalizamos recentemente a Landing Page de uma ${niche} em ${city}.\n\nEm 18 dias no ar, ela gerou 23 mensagens de orçamento direto no WhatsApp — sem investimento em anúncios ainda.\n\nTeria 10 minutos essa semana para eu te mostrar o projeto?`
-        : websiteScore.totalScore < 50
-        ? `Oi! Reformulamos o site de uma ${niche} em ${city} focando em velocidade mobile e botão de WhatsApp.\n\nA taxa de contatos via WhatsApp aumentou 3x em 30 dias, sem aumento de investimento em anúncios.\n\nPosso te apresentar o antes e depois em 10 minutos?`
-        : `Oi! Gerenciamos uma campanha de Google Ads para uma ${niche} em ${city} com investimento de R$ 1.200/mês.\n\nEm 45 dias: 67 novos orçamentos no WhatsApp. Custo por lead: R$ 17,90.\n\nTeria 15 minutos para analisar o potencial da ${name} nessa estrutura?`
+      day: "D4", 
+      title: "Gancho Visual / Modelo Pronto",
+      script: visualDemoPitch
     },
     {
-      day: "D11", title: "Pergunta de Qualificação",
-      script: `Oi! Uma pergunta direta para eu não insistir no assunto errado:\n\nA captação de novos clientes para a ${name} está fluindo bem — ou existe uma meta que vocês gostariam de acelerar nos próximos meses?\n\nA resposta vai definir se faz sentido seguirmos a conversa. 🙂`
+      day: "D7", 
+      title: "Script para Gravar Áudio (30s)",
+      script: `🎙️ [GRAVAR ÁUDIO DE 25-35 SEGUNDOS]:\n"Fala ${name}, tudo joia? Mandei mensagem aí esses dias... gravei esse áudio rapidinho só pra te explicar: vi que vocês têm bastante avaliação boa no Google Maps aqui em ${city}, mas quem pesquisa pelo serviço no celular não acha o site de vocês. Rascunhei um modelo bem clean pra vocês receberem orçamentos direto no WhatsApp. Se quiser dar uma olhada, me dá um toque que te mando aqui sem compromisso nenhum. Valeu!"`
     },
     {
-      day: "D14", title: "Breakup Elegante",
-      script: `Oi! Encerro minhas mensagens por aqui para respeitar o seu tempo.\n\nSe ${commercialOpportunity.toLowerCase()} entrar na pauta da ${name} no futuro, estou disponível — é só me chamar.\n\nSucesso e um abraço! 🤝`
+      day: "D10", 
+      title: "Pergunta Direta e Leve",
+      script: `Oi! Só pra eu não insistir se não fizer sentido: colocar um site no ar ou anunciar no Google é algo que tá no radar de vocês esse mês ou a agenda já tá cheia por aí?`
+    },
+    {
+      day: "D14", 
+      title: "Breakup Humanizado (Despedida Amigável)",
+      script: `Imagino que a rotina esteja corrida por aí! Não vou mais encher seu saco haha. Se um dia quiserem colocar um site no ar ou pegar clientes do Google, é só me dar um alô aqui. Sucesso pra ${name}! 🤝`
     }
   ];
 
-  // 7. OBJEÇÕES INVESTIGATIVAS (Nunca rebater, sempre investigar)
+  // 7. TRATAMENTO HUMANO DE OBJEÇÕES
   const objections = [
     {
-      objection: "Já temos agência / responsável",
-      response: `Boa! Com a agência de vocês, a meta mensal de novos orçamentos está sendo atingida de forma consistente — ou existe uma meta que ainda não conseguiram bater?`
+      objection: "Já temos agência / já temos quem faça",
+      response: `Ah que massa! E eles tão focando em colocar vocês no topo do Google pra quem pesquisa em ${city}, ou tão mais cuidando das postagens de Instagram?`
     },
     {
       objection: "Não tenho interesse agora",
-      response: `Tranquilo, respeito totalmente. Só pra eu não insistir no assunto errado: a captação de clientes da ${name} está fluindo bem, ou existe uma meta de crescimento que vocês gostariam de acelerar?`
+      response: `Tranquilo, sem crise nenhuma! É porque vocês já tão com a agenda cheia por aí ou porque já tiveram alguma experiência ruim com isso antes?`
     },
     {
       objection: "Quanto custa?",
-      response: `Boa pergunta! O valor varia com o objetivo de vocês. Para te passar um número preciso: o foco agora é aumentar o volume de orçamentos no WhatsApp — ou melhorar a qualidade dos leads que chegam?`
+      response: `Cara, depende do que você precisa, mas é bem acessível. Uma página rápida pra receber orçamentos no Whats fica na faixa de R$ 1.500 a R$ 2.500 em parcela única, sem mensalidade presa. Quer que eu te mostre o modelo pra ver se faz sentido pro seu negócio?`
     },
     {
-      objection: "Me manda mais informações",
-      response: `Claro! Para eu enviar o que é mais relevante: o maior desafio hoje é trazer novos clientes, converter os que já chegam, ou escalar o que já funciona?`
+      objection: "Me manda a proposta por aqui",
+      response: `Mando sim! Só me diz uma coisa rápida pra eu te mandar o que faz mais sentido: hoje o maior objetivo de vocês seria aparecer no Google pra quem busca na cidade ou passar mais autoridade pra quem já chega no WhatsApp?`
     },
     {
-      objection: "Vou pensar",
-      response: `Sem problema! Tem alguma informação que falta para essa decisão ficar mais clara — ou é mais uma questão de timing?`
+      objection: "Vou ver com meu sócio / vou pensar",
+      response: `Show de bola! Quer que eu te mande o print do modelo pra você mostrar pra ele? Ajuda bastante a visualizar como fica.`
     }
   ];
 
   const nextAction = !hasWebsite
-    ? "Enviar abertura D0 via WhatsApp — hipótese de captação local"
+    ? "Enviar mensagem curta de abertura D0 no WhatsApp perguntando se atendem clientes do Google"
     : websiteScore.totalScore < 50
-    ? "Enviar diagnóstico mobile consultivo via WhatsApp"
-    : "Enviar abertura sobre tráfego pago e concorrência no Google";
+    ? "Enviar aviso sincero sobre a lentidão do botão de WhatsApp no celular"
+    : "Perguntar se já testaram anúncios no Google para quem pesquisa na cidade";
 
   return {
-    summary: `${name} é um lead ${scores.classification} (${scores.finalScore}/100) no segmento de ${niche} em ${city}.`,
+    summary: `${name} (${niche} em ${city}) — Avaliação: ${rating} ⭐ (${reviewCount} opiniões).`,
     main_problem: mainProblem,
     commercial_opportunity: commercialOpportunity,
-    recommended_service: scores.primaryOffer.title,
+    recommended_service: scores.primaryOffer?.title || (hasWebsite ? "Reformulação / Tráfego" : "Criação de Landing Page"),
     priority: scores.classification,
-    sales_angle: salesAngle,
+    sales_angle: mainProblem,
     opening_message: openingMessage,
+    visualDemoPitch,
     whatsappPitch,
     emailPitch,
     callScript,
@@ -152,14 +151,13 @@ export const generateAiLeadAnalysis = (company, scores, techResults, websiteScor
     next_action: nextAction,
     sdrFramework: {
       diagnostico: { empresa: name, nicho: niche, cidade: city, avaliacoes: `${rating} ⭐ (${reviewCount})`, dorPrincipal: mainProblem },
-      estrategia: { canal: "WhatsApp → E-mail → Ligação", microCta: "Isso acontece aí também?", oferta: commercialOpportunity },
+      estrategia: { canal: "WhatsApp (Curto) → Áudio (30s) → Demonstração", microCta: "Hoje vocês pegam clientes pelo Google ou vem tudo por indicação?", oferta: commercialOpportunity },
       qualificacao: {
-        desqualificado: "Sem interesse e sem meta de crescimento declarada",
-        nutricao: "Reconhece a dor mas não é prioridade agora",
-        qualificado: "Tem meta de crescimento e interesse em resolver o problema",
-        oportunidade: "Intenção clara de avanço — reunião agendada"
+        desqualificado: "Sem interesse real e operação parada",
+        nutricao: "Gostou da ideia mas está sem tempo agora",
+        qualificado: "Pediu para ver o modelo/vídeo",
+        oportunidade: "Quer proposta e reunião de fechamento"
       }
     }
   };
 };
-
