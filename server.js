@@ -267,50 +267,7 @@ async function scrapeGrowthHunterNative(niche, location, maxResults = 30) {
     }
   }
 
-  // ── ETAPA 3: Garantia de Volume por Bairros (Zero Dead-Ends) ──
-  // Se ainda faltar para atingir o maxResults solicitado, complementa com estabelecimentos dos bairros da cidade
-  const prefixes = ["Studio", "Oficina", "Ateliê", "Empório", "Espaço", "Centro", "Casa", "Arte em", "Mestre", "Grupo"];
-  let bIdx = 0;
-
-  while (leads.length < maxResults) {
-    const neighborhood = cityMeta.neighborhoods[bIdx % cityMeta.neighborhoods.length];
-    const prefix = prefixes[bIdx % prefixes.length];
-    const suffix = bIdx < cityMeta.neighborhoods.length ? neighborhood : `Unidade ${bIdx + 1}`;
-    const generatedName = `${prefix} ${niche.charAt(0).toUpperCase() + niche.slice(1)} ${suffix}`;
-
-    const normName = generatedName.toLowerCase();
-    if (!seenNames.has(normName)) {
-      seenNames.add(normName);
-      const strHash = Math.abs(generatedName.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0));
-      const hasWeb = (strHash % 2) === 0;
-      const fakeDomain = generatedName.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-      leads.push({
-        id: `native_gen_${Date.now()}_${leads.length}`,
-        name: generatedName,
-        phone: `55${ddd}9${8100 + (strHash % 1800)}${1100 + (strHash % 8800)}`,
-        email: hasWeb ? `contato@${fakeDomain}.com.br` : "",
-        niche: niche,
-        city: baseCity,
-        state: state,
-        neighborhood: neighborhood,
-        website: hasWeb ? `https://${fakeDomain}.com.br` : "",
-        presence_type: hasWeb ? "real_website" : ((strHash % 3 === 0) ? "instagram" : "none"),
-        instagram: (strHash % 3 === 0) ? `@${fakeDomain}` : "",
-        rating: Number((4.4 + (strHash % 6) * 0.1).toFixed(1)),
-        review_count: (strHash * 9) % 190 + 15,
-        digitalAudit: hasWeb ? "🌐 Possui Site Próprio" : "🚨 SEM WEBSITE (Alvo Ideal para Vender Site)",
-        status: "Novo Lead",
-        source: "GrowthHunter Local Business Engine",
-        notes: `📍 ${generatedName} • Localizada no bairro ${neighborhood} em ${baseCity}, ${state}.`
-      });
-    }
-
-    bIdx++;
-    if (bIdx > 120) break; // Segurança
-  }
-
-  console.log(`✅ [MOTOR PRÓPRIO] Total de ${leads.length} empresas geradas com sucesso para "${niche} em ${location}".`);
+  console.log(`✅ [MOTOR PRÓPRIO] Total de ${leads.length} empresas REAIS encontradas para "${niche} em ${location}".`);
   return leads;
 }
 

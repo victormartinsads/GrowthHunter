@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { X, Search, Sparkles, AlertCircle, RefreshCw, Zap, Globe, ShieldCheck, MapPin, Building } from "lucide-react";
+import { X, Search, Sparkles, AlertCircle, RefreshCw, Zap, Globe, ShieldCheck, MapPin, Building, CheckCircle2 } from "lucide-react";
 import { searchLeadsNative, searchLeadsApify } from "../utils/apifyService";
 import { fetchAppSettings } from "../utils/dataService";
 
 const SUGGESTED_NICHES = [
+  "Marcenaria",
+  "Vidraçaria",
   "Clínica Odontológica",
   "Escritório de Advocacia",
   "Clínica de Estética",
-  "Clínica Médica",
-  "Restaurante",
   "Auto Center & Mecânica",
-  "Imobiliária",
-  "Contabilidade"
+  "Restaurante",
+  "Imobiliária"
 ];
 
 const SUGGESTED_CITIES = [
@@ -25,8 +25,8 @@ const SUGGESTED_CITIES = [
 ];
 
 export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads }) {
-  const [engine, setEngine] = useState("native"); // "native" (gratuito) ou "apify"
-  const [niche, setNiche] = useState("Clínica Odontológica");
+  const [engine, setEngine] = useState("apify"); // "apify" (Google Maps Oficial) ou "native" (Gratuito)
+  const [niche, setNiche] = useState("Marcenaria");
   const [location, setLocation] = useState("São Paulo, SP");
   const [maxResults, setMaxResults] = useState(30);
   const [apifyToken, setApifyToken] = useState(() => {
@@ -54,24 +54,24 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
-    setStatusMsg(engine === "native" 
-      ? "🕷️ Motor Próprio: Extraindo empresas, telefones e validando redes sociais..."
-      : "⚡ Conectando ao Crawler em Nuvem..."
+    setStatusMsg(engine === "apify" 
+      ? "📍 Extraindo estabelecimentos 100% reais diretamente do Google Maps..."
+      : "🕷️ Buscando empresas cadastradas no OpenStreetMap e Web Local..."
     );
 
     try {
       let data;
-      if (engine === "native") {
-        data = await searchLeadsNative({ niche, location, maxResults });
-      } else {
+      if (engine === "apify") {
         data = await searchLeadsApify({ niche, location, maxResults, apifyToken });
+      } else {
+        data = await searchLeadsNative({ niche, location, maxResults });
       }
 
       if (data.leads && data.leads.length > 0) {
         onImportLeads(data.leads);
         onClose();
       } else {
-        setErrorMsg("Nenhuma empresa localizada com esses termos. Tente um nicho ou cidade mais ampla.");
+        setErrorMsg("Nenhuma empresa localizada com esses termos no Google Maps. Tente um nicho ou cidade mais ampla.");
       }
     } catch (err) {
       setErrorMsg(err.message || "Erro durante a extração de leads.");
@@ -95,7 +95,7 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
     }}>
       <div className="glass-card" style={{
         width: "100%",
-        maxWidth: "640px",
+        maxWidth: "650px",
         padding: "1.75rem",
         display: "flex",
         flexDirection: "column",
@@ -112,10 +112,10 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
             </div>
             <div>
               <h3 style={{ fontSize: "1.2rem", fontWeight: "900", color: "#1c1917", margin: 0 }}>
-                Buscador Inteligente de Leads Locais
+                Buscador de Leads 100% Reais (Google Maps)
               </h3>
               <span style={{ fontSize: "0.75rem", color: "#78716c" }}>
-                Extração de empresas por Nicho & Cidade com inteligência de vendas
+                Extrai estabelecimentos comerciais reais com avaliações, telefones e websites
               </span>
             </div>
           </div>
@@ -125,10 +125,10 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
           </button>
         </div>
 
-        {/* ── Engine Switcher (Motor Próprio vs Apify) ── */}
+        {/* ── Engine Switcher (Apify Google Maps vs Motor Web) ── */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
+          gridTemplateColumns: "1.2fr 1fr",
           gap: "0.5rem",
           background: "#faf9f6",
           padding: "0.35rem",
@@ -137,33 +137,9 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
         }}>
           <button
             type="button"
-            onClick={() => setEngine("native")}
-            style={{
-              padding: "0.55rem 0.8rem",
-              borderRadius: "6px",
-              fontSize: "0.82rem",
-              fontWeight: engine === "native" ? "800" : "600",
-              cursor: "pointer",
-              border: engine === "native" ? "1px solid #ea580c" : "1px solid transparent",
-              background: engine === "native" ? "#ffffff" : "transparent",
-              color: engine === "native" ? "#ea580c" : "#57534e",
-              boxShadow: engine === "native" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.4rem",
-              transition: "all 0.15s"
-            }}
-          >
-            <Zap size={15} color={engine === "native" ? "#ea580c" : "#78716c"} />
-            <span>Motor Próprio (100% Gratuito)</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setEngine("apify")}
             style={{
-              padding: "0.55rem 0.8rem",
+              padding: "0.6rem 0.8rem",
               borderRadius: "6px",
               fontSize: "0.82rem",
               fontWeight: engine === "apify" ? "800" : "600",
@@ -180,7 +156,31 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
             }}
           >
             <Globe size={15} color={engine === "apify" ? "#ea580c" : "#78716c"} />
-            <span>Apify Cloud Crawler</span>
+            <span>Google Maps Oficial (Apify)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setEngine("native")}
+            style={{
+              padding: "0.6rem 0.8rem",
+              borderRadius: "6px",
+              fontSize: "0.82rem",
+              fontWeight: engine === "native" ? "800" : "600",
+              cursor: "pointer",
+              border: engine === "native" ? "1px solid #ea580c" : "1px solid transparent",
+              background: engine === "native" ? "#ffffff" : "transparent",
+              color: engine === "native" ? "#ea580c" : "#57534e",
+              boxShadow: engine === "native" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.4rem",
+              transition: "all 0.15s"
+            }}
+          >
+            <Zap size={15} color={engine === "native" ? "#ea580c" : "#78716c"} />
+            <span>Motor Web Local (Gratuito)</span>
           </button>
         </div>
 
@@ -190,7 +190,7 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
           {/* Nicho */}
           <div>
             <label style={{ fontSize: "0.82rem", fontWeight: "700", color: "#1c1917", display: "block", marginBottom: "0.35rem" }}>
-              Nicho / Segmento de Atuação:
+              Nicho / Ramo de Atuação:
             </label>
             <input 
               type="text" 
@@ -198,12 +198,12 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
               style={{ width: "100%", fontSize: "0.88rem" }}
               value={niche}
               onChange={(e) => setNiche(e.target.value)}
-              placeholder="Ex: Clínica Odontológica, Advocacia, Mecânica..."
+              placeholder="Ex: Marcenaria, Vidraçaria, Odontologia, Mecânica..."
               required
             />
             {/* Quick Pills */}
             <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginTop: "0.4rem" }}>
-              {SUGGESTED_NICHES.slice(0, 4).map(item => (
+              {SUGGESTED_NICHES.slice(0, 5).map(item => (
                 <button
                   key={item}
                   type="button"
@@ -280,19 +280,26 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
             </div>
           </div>
 
-          {/* Token Apify (somente se motor for Apify) */}
+          {/* Token Apify */}
           {engine === "apify" && (
             <div style={{ background: "#faf9f6", padding: "0.75rem", borderRadius: "8px", border: "1px solid #e8e6e0" }}>
-              <label style={{ fontSize: "0.78rem", fontWeight: "700", color: "#1c1917", display: "block", marginBottom: "0.25rem" }}>
-                Apify API Token (Opcional se salvo nas Configurações):
-              </label>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                <label style={{ fontSize: "0.78rem", fontWeight: "700", color: "#1c1917" }}>
+                  Token Apify (Google Places Actor):
+                </label>
+                {apifyToken && (
+                  <span style={{ fontSize: "0.7rem", color: "#16a34a", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                    <CheckCircle2 size={12} /> Salvo e Conectado
+                  </span>
+                )}
+              </div>
               <input 
                 type="password" 
                 className="glass-input" 
                 style={{ width: "100%", fontSize: "0.8rem" }}
                 value={apifyToken}
                 onChange={(e) => setApifyToken(e.target.value)}
-                placeholder="apify_api_..."
+                placeholder="Insira seu token do Apify para extrair do Google Maps em tempo real"
               />
             </div>
           )}
@@ -348,7 +355,7 @@ export default function ApifyLeadFinderModal({ isOpen, onClose, onImportLeads })
             }}
           >
             {loading ? <RefreshCw size={18} className="animate-spin" /> : <Search size={18} />}
-            <span>{loading ? "Extraindo e Auditando Leads..." : `Extrair ${maxResults} Leads com ${engine === 'native' ? 'Motor Próprio' : 'Apify'}`}</span>
+            <span>{loading ? "Extraindo dados do Google Maps..." : `Extrair ${maxResults} Empresas Reais do Google Maps`}</span>
           </button>
         </form>
       </div>
