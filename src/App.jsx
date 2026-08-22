@@ -20,7 +20,7 @@ import AuthModal from "./components/AuthModal";
 import ToastNotification from "./components/ToastNotification";
 
 import { deduplicateCompanies } from "./utils/deduplication";
-import { detectTechnologiesInHtml, calculateWebsiteScore } from "./utils/websiteAnalyzer";
+import { detectTechnologiesInHtml, calculateWebsiteScore, filterAndValidateWebsite } from "./utils/websiteAnalyzer";
 import { evaluateCompanyOpportunities, calculateLeadScores } from "./utils/scoringEngine";
 import { generateAiLeadAnalysis } from "./utils/aiLeadAnalyst";
 import {
@@ -33,39 +33,52 @@ import {
   isMigrationDone,
 } from "./utils/dataService";
 
-// Função auxiliar de enriquecimento no nível do módulo
+// Função auxiliar de enriquecimento no nível do módulo com filtro real de websites
 const processAndEnrichCompany = (comp, orgName = "growthhunter_tenant_default") => {
-  const hasWebsite = Boolean(comp.website && String(comp.website).trim() !== "");
+  // 1. Validação estrita: se for Instagram, Linktree, Facebook, WhatsApp, etc., NÃO É SITE PRÓPRIO
+  const webCheck = filterAndValidateWebsite(comp.website || "");
+  const isRealWebsite = webCheck.isRealWebsite;
+  const cleanWebsite = webCheck.cleanUrl;
+  const instagramHandle = comp.instagram || (webCheck.detectedType === "instagram" ? webCheck.socialProfile : null);
 
-  const techResults = comp.tech_results || detectTechnologiesInHtml(
-    hasWebsite ? `<html><head><title>${comp.name}</title></head><body></body></html>` : "",
-    comp.website
+  const cleanComp = {
+    ...comp,
+    website: cleanWebsite,
+    original_website_input: comp.website || "",
+    is_real_website: isRealWebsite,
+    presence_type: webCheck.detectedType,
+    instagram: instagramHandle
+  };
+
+  const techResults = cleanComp.tech_results || detectTechnologiesInHtml(
+    isRealWebsite ? `<html><head><title>${cleanComp.name}</title></head><body></body></html>` : "",
+    cleanComp.website
   );
 
-  const websiteScore = calculateWebsiteScore(comp, techResults);
-  const opportunities = evaluateCompanyOpportunities(comp, techResults, websiteScore);
-  const scores = calculateLeadScores(comp, techResults, websiteScore, opportunities);
-  const aiAnalysis = generateAiLeadAnalysis(comp, scores, techResults, websiteScore);
+  const websiteScore = calculateWebsiteScore(cleanComp, techResults);
+  const opportunities = evaluateCompanyOpportunities(cleanComp, techResults, websiteScore);
+  const scores = calculateLeadScores(cleanComp, techResults, websiteScore, opportunities);
+  const aiAnalysis = generateAiLeadAnalysis(cleanComp, scores, techResults, websiteScore);
 
-  const strHash = Math.abs((comp.name || "").split("").reduce((acc, char) => acc + char.charCodeAt(0), 0));
-  const realRating = Number(comp.rating) > 0 ? Number(comp.rating) : Number((3.8 + (strHash % 12) * 0.1).toFixed(1));
-  const realReviews = Number(comp.review_count || comp.reviewsCount) > 0 ? Number(comp.review_count || comp.reviewsCount) : (strHash * 13) % 220 + 3;
+  const strHash = Math.abs((cleanComp.name || "").split("").reduce((acc, char) => acc + char.charCodeAt(0), 0));
+  const realRating = Number(cleanComp.rating) > 0 ? Number(cleanComp.rating) : Number((3.8 + (strHash % 12) * 0.1).toFixed(1));
+  const realReviews = Number(cleanComp.review_count || cleanComp.reviewsCount) > 0 ? Number(cleanComp.review_count || cleanComp.reviewsCount) : (strHash * 13) % 220 + 3;
 
   return {
-    ...comp,
+    ...cleanComp,
     rating: realRating,
     review_count: realReviews,
     organization_id: orgName,
-    source: comp.source || "google_maps",
-    website_status: hasWebsite ? (websiteScore.totalScore < 50 ? "bad" : "good") : "missing",
+    source: cleanComp.source || "google_maps",
+    website_status: isRealWebsite ? (websiteScore.totalScore < 50 ? "bad" : "good") : "missing",
     tech_results: techResults,
     website_score: websiteScore,
     opportunities,
     scores,
     aiAnalysis,
-    pipeline_stage: comp.pipeline_stage || comp.status || "NEW",
-    status: comp.status || "Novo Lead",
-    created_at: comp.created_at || new Date().toISOString()
+    pipeline_stage: cleanComp.pipeline_stage || cleanComp.status || "NEW",
+    status: cleanComp.status || "Novo Lead",
+    created_at: cleanComp.created_at || new Date().toISOString()
   };
 };
 

@@ -416,9 +416,33 @@ app.post("/api/search-leads-apify", async (req, res) => {
         const leads = rawItems.map((item, index) => {
           const rawPhone = item.phoneUnformatted || item.phone || "";
           const cleanPhone = rawPhone ? `55${rawPhone.replace(/\D/g, '')}` : "";
-          let website = item.website || item.url || "";
-          if (website === "undefined" || website === "null") website = "";
+          let rawWebsite = (item.website || item.url || "").trim();
+          if (rawWebsite === "undefined" || rawWebsite === "null") rawWebsite = "";
           
+          let cleanWebsite = rawWebsite;
+          let instagramHandle = item.instagram || "";
+          let presenceType = "real_website";
+
+          const lowerWeb = rawWebsite.toLowerCase();
+          if (lowerWeb.includes("instagram.com") || lowerWeb.includes("instagr.am")) {
+            const match = rawWebsite.match(/instagram\.com\/([a-zA-Z0-9._]+)/i);
+            if (match && match[1]) instagramHandle = `@${match[1].replace(/\/$/, "")}`;
+            cleanWebsite = "";
+            presenceType = "instagram";
+          } else if (lowerWeb.includes("facebook.com") || lowerWeb.includes("fb.com")) {
+            cleanWebsite = "";
+            presenceType = "facebook";
+          } else if (lowerWeb.includes("linktr.ee") || lowerWeb.includes("linktree") || lowerWeb.includes("bio.site") || lowerWeb.includes("beacons.ai") || lowerWeb.includes("taplink")) {
+            cleanWebsite = "";
+            presenceType = "linktree";
+          } else if (lowerWeb.includes("wa.me") || lowerWeb.includes("whatsapp.com")) {
+            cleanWebsite = "";
+            presenceType = "whatsapp";
+          } else if (!rawWebsite) {
+            cleanWebsite = "";
+            presenceType = "none";
+          }
+
           const cityParts = (item.city || location).split(",");
           const cityClean = cityParts[0].trim();
 
@@ -433,11 +457,15 @@ app.post("/api/search-leads-apify", async (req, res) => {
             niche: item.categoryName || niche,
             city: cityClean,
             neighborhood: item.neighborhood || item.subLocality || "",
-            website: website,
+            website: cleanWebsite,
+            original_website: rawWebsite,
+            presence_type: presenceType,
             rating: realRating > 0 ? realRating : Number((3.8 + (index % 12) * 0.1).toFixed(1)),
             review_count: realReviewCount > 0 ? realReviewCount : (index * 17 + 8) % 180 + 3,
-            instagram: item.instagram || "",
-            digitalAudit: website ? "⚠️ Analisar Pixel e Meta Ads" : "🚨 SEM WEBSITE (Alvo Ideal para Vender Site)",
+            instagram: instagramHandle,
+            digitalAudit: cleanWebsite 
+              ? "🌐 Possui Site Próprio (Auditar Pixel, GA4 e Mobile)" 
+              : (presenceType === "instagram" ? "📸 Cadastrou apenas Instagram (SEM SITE PRÓPRIO)" : "🚨 SEM WEBSITE (Alvo Máximo para Venda de Site)"),
             status: "Novo Lead",
             notes: `📍 Empresa REAL do Apify (Google Maps) • Avaliação: ${realRating}⭐ (${realReviewCount} avaliações). ${item.address || ''}`
           };

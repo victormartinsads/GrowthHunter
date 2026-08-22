@@ -262,15 +262,25 @@ export default function CompanyDatabaseView({
 
                     {/* Website & Tech Tracking */}
                     <td style={{ padding: "0.85rem 1rem" }}>
-                      {isNoWebsite ? (
+                      {!company.is_real_website && company.presence_type === "instagram" ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          <span style={{ fontSize: "0.78rem", color: "#db2777", fontWeight: "700" }}>📸 Instagram ({company.instagram || "perfil"})</span>
+                          <span style={{ fontSize: "0.7rem", color: "#dc2626", fontWeight: "700" }}>🚨 SEM SITE PRÓPRIO</span>
+                        </div>
+                      ) : !company.is_real_website && company.presence_type === "linktree" ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          <span style={{ fontSize: "0.78rem", color: "#7c3aed", fontWeight: "700" }}>🔗 Linktree / Bio</span>
+                          <span style={{ fontSize: "0.7rem", color: "#dc2626", fontWeight: "700" }}>🚨 SEM SITE PRÓPRIO</span>
+                        </div>
+                      ) : isNoWebsite ? (
                         <span style={{ fontSize: "0.78rem", color: "#dc2626", fontWeight: "700" }}>🚨 SEM WEBSITE</span>
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                          <a href={buildWebsiteUrl(company.website)} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.78rem", color: "#0284c7", fontWeight: "600", textDecoration: "none" }}>
-                            🌐 {company.website.replace(/^https?:\/\//, '').substring(0, 22)}...
+                          <a href={buildWebsiteUrl(company.website)} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.78rem", color: "#0284c7", fontWeight: "700", textDecoration: "none" }}>
+                            🌐 {company.website.replace(/^https?:\/\/(www\.)?/, '').substring(0, 24)}
                           </a>
-                          <span style={{ fontSize: "0.72rem", color: company.tech_results?.metaPixel?.detected === "detected" ? "#16a34a" : "#dc2626" }}>
-                            {company.tech_results?.metaPixel?.detected === "detected" ? "Meta Pixel: ✅" : "Meta Pixel: ❌"}
+                          <span style={{ fontSize: "0.72rem", color: company.tech_results?.metaPixel?.detected === "detected" ? "#16a34a" : "#ea580c" }}>
+                            {company.tech_results?.metaPixel?.detected === "detected" ? "Meta Pixel: ✅" : "Meta Pixel: ❌"} • {company.website_score?.grade ? `Nota ${company.website_score.grade}` : ""}
                           </span>
                         </div>
                       )}

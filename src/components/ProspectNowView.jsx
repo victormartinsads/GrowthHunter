@@ -447,21 +447,29 @@ export default function ProspectNowView({
                   <span style={{ fontSize: "0.75rem", color: "#78716c", display: "block", textTransform: "uppercase", fontWeight: "700" }}>
                     Status da Presença Web:
                   </span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "2px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "2px", flexWrap: "wrap" }}>
                     {hasWebsite ? (
                       <a 
                         href={company.website.startsWith("http") ? company.website : `https://${company.website}`} 
                         target="_blank" 
                         rel="noreferrer"
-                        style={{ fontSize: "0.88rem", fontWeight: "800", color: "#0284c7", display: "flex", alignItems: "center", gap: "0.3rem", textDecoration: "underline" }}
+                        style={{ fontSize: "0.85rem", fontWeight: "800", color: "#0284c7", display: "flex", alignItems: "center", gap: "0.3rem", textDecoration: "underline" }}
                       >
-                        <Globe size={15} />
+                        <Globe size={14} />
                         <span>{company.website.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}</span>
                         <ArrowUpRight size={13} />
                       </a>
+                    ) : company.presence_type === "instagram" ? (
+                      <span style={{ fontSize: "0.82rem", fontWeight: "800", color: "#db2777", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                        <span>📸 Instagram ({company.instagram || "perfil"}) • SEM SITE</span>
+                      </span>
+                    ) : company.presence_type === "linktree" ? (
+                      <span style={{ fontSize: "0.82rem", fontWeight: "800", color: "#7c3aed", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                        <span>🔗 Usa Linktree • SEM SITE PRÓPRIO</span>
+                      </span>
                     ) : (
-                      <span style={{ fontSize: "0.88rem", fontWeight: "800", color: "#dc2626", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                        <XCircle size={15} />
+                      <span style={{ fontSize: "0.82rem", fontWeight: "800", color: "#dc2626", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                        <XCircle size={14} />
                         <span>SEM SITE PRÓPRIO (NÃO POSSUI)</span>
                       </span>
                     )}
