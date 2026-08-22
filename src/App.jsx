@@ -23,14 +23,20 @@ import { deduplicateCompanies } from "./utils/deduplication";
 import { detectTechnologiesInHtml, calculateWebsiteScore } from "./utils/websiteAnalyzer";
 import { evaluateCompanyOpportunities, calculateLeadScores } from "./utils/scoringEngine";
 import { generateAiLeadAnalysis } from "./utils/aiLeadAnalyst";
-
-const STORAGE_KEY = "growthhunter_companies_v5";
+import {
+  fetchAllCompanies,
+  upsertManyCompanies,
+  updateCompany,
+  deleteCompany,
+  deleteAllCompanies,
+  migrateFromLocalStorage,
+  isMigrationDone,
+} from "./utils/dataService";
 
 // Função auxiliar de enriquecimento no nível do módulo
 const processAndEnrichCompany = (comp, orgName = "growthhunter_tenant_default") => {
   const hasWebsite = Boolean(comp.website && String(comp.website).trim() !== "");
-  
-  // Detecção limpa de tecnologias sem injeção de scripts fictícios
+
   const techResults = comp.tech_results || detectTechnologiesInHtml(
     hasWebsite ? `<html><head><title>${comp.name}</title></head><body></body></html>` : "",
     comp.website
@@ -65,7 +71,8 @@ const processAndEnrichCompany = (comp, orgName = "growthhunter_tenant_default") 
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("prospect_now");
-  
+  const [dbLoading, setDbLoading] = useState(true);
+
   // User Auth & Tenant State
   const [currentUser, setCurrentUser] = useState({
     id: "user_owner_1",
@@ -75,22 +82,8 @@ export default function App() {
     orgName: "GrowthHunter SaaS Tenant"
   });
 
-  // State for companies com re-enriquecimento automático de notas limpas
-  const [companies, setCompanies] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Re-avalia para garantir variabilidade e eliminar fallbacks antigos
-          return parsed.map(c => processAndEnrichCompany(c, "GrowthHunter SaaS Tenant"));
-        }
-      }
-    } catch (e) {
-      console.error("Erro ao carregar dados do localStorage:", e);
-    }
-    return [];
-  });
+  // Leads — carregados do Supabase ao montar
+  const [companies, setCompanies] = useState([]);
 
   // Modals states
   const [isApifyModalOpen, setIsApifyModalOpen] = useState(false);
@@ -109,24 +102,44 @@ export default function App() {
     setToast({ message, type, duration });
   };
 
-  // Persistir no localStorage
+  // ── Boot: migrar localStorage → Supabase (primeira vez) e carregar dados ──
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(companies));
-    } catch (e) {
-      console.error("Erro ao salvar no localStorage:", e);
+    async function boot() {
+      setDbLoading(true);
+      try {
+        // Migração única: se ainda tem dados no localStorage, sobe para Supabase
+        if (!isMigrationDone()) {
+          const result = await migrateFromLocalStorage();
+          if (result.migrated > 0) {
+            showToast(`☁️ ${result.migrated} leads migrados do armazenamento local para o banco de dados!`, "success", 5000);
+          }
+        }
+        // Carrega todos os leads do Supabase
+        const data = await fetchAllCompanies();
+        const enriched = data.map(c => processAndEnrichCompany(c, currentUser?.orgName));
+        setCompanies(enriched);
+      } catch (err) {
+        console.error("[Boot] Erro ao carregar dados do Supabase:", err);
+        showToast("⚠️ Erro ao conectar com o banco de dados.", "error");
+      } finally {
+        setDbLoading(false);
+      }
     }
-  }, [companies]);
+    boot();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Contagem de HOT Leads (Score 90+)
   const hotCompaniesCount = useMemo(() => {
     return companies.filter(c => (c.scores?.finalScore || 0) >= 90).length;
   }, [companies]);
 
-  // Importador de Novas Empresas com Deduplicação
-  const handleImportCompanies = (newLeads) => {
+  // ── Importar Novas Empresas ──
+  const handleImportCompanies = async (newLeads) => {
     const processed = newLeads.map(c => processAndEnrichCompany(c, currentUser?.orgName));
     const { uniqueCompanies, inserted, duplicateCount } = deduplicateCompanies(companies, processed);
+
+    // Salva no Supabase em batch
+    await upsertManyCompanies(inserted);
     setCompanies(uniqueCompanies);
 
     if (duplicateCount > 0) {
@@ -136,44 +149,42 @@ export default function App() {
     }
   };
 
-  // Atualizar Estágio do Pipeline
-  const handleUpdatePipelineStage = (companyId, newStageId) => {
-    setCompanies(prev => prev.map(c => {
-      if (c.id === companyId) {
-        return {
-          ...c,
-          pipeline_stage: newStageId,
-          status: newStageId
-        };
-      }
-      return c;
-    }));
+  // ── Atualizar Estágio do Pipeline ──
+  const handleUpdatePipelineStage = async (companyId, newStageId) => {
+    setCompanies(prev => prev.map(c =>
+      c.id === companyId ? { ...c, pipeline_stage: newStageId, status: newStageId } : c
+    ));
+    await updateCompany(companyId, { pipeline_stage: newStageId, status: newStageId });
     showToast("📋 Estágio do CRM atualizado!", "success");
   };
 
-  // Atualizar Empresa
-  const handleSaveCompany = (updatedCompany) => {
+  // ── Atualizar Empresa ──
+  const handleSaveCompany = async (updatedCompany) => {
     const reProcessed = processAndEnrichCompany(updatedCompany);
     setCompanies(prev => prev.map(c => c.id === reProcessed.id ? reProcessed : c));
+    await upsertManyCompanies([reProcessed]);
     showToast("✅ Empresa atualizada com sucesso!", "success");
   };
 
-  // Excluir Selecionados
-  const handleDeleteBatch = (idsToDelete) => {
+  // ── Excluir em Batch ──
+  const handleDeleteBatch = async (idsToDelete) => {
     if (window.confirm(`Deseja realmente remover ${idsToDelete.length} empresa(s)?`)) {
       setCompanies(prev => prev.filter(c => !idsToDelete.includes(c.id)));
+      await Promise.all(idsToDelete.map(id => deleteCompany(id)));
       showToast("🗑️ Empresas removidas da base.", "info");
     }
   };
 
-  // Limpar Toda a Base
-  const handleClearAllCompanies = () => {
+  // ── Limpar Toda a Base ──
+  const handleClearAllCompanies = async () => {
     if (window.confirm("Deseja apagar TODAS as empresas para começar uma prospecção limpa?")) {
       setCompanies([]);
-      localStorage.removeItem(STORAGE_KEY);
+      await deleteAllCompanies();
       showToast("🗑️ Base de empresas limpa! Clique em 'Nova Prospecção Apify'.", "info");
     }
   };
+
+
 
   // Adicionar Tarefa a uma Empresa
   const handleAddTask = (companyId, task) => {
