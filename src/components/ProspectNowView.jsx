@@ -131,6 +131,17 @@ export default function ProspectNowView({
 
         {/* Action / Filter Bar */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          {/* New Search Button */}
+          <button 
+            type="button"
+            onClick={onOpenApifyModal}
+            className="btn-primary"
+            style={{ fontSize: "0.82rem", padding: "0.45rem 0.95rem", display: "flex", alignItems: "center", gap: "0.4rem" }}
+          >
+            <Zap size={15} />
+            <span>+ Buscar Mais Empresas</span>
+          </button>
+
           {/* Select All Checkbox */}
           <button 
             type="button"

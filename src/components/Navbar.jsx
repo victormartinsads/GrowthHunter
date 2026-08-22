@@ -144,12 +144,17 @@ export default function Navbar({
           className="btn-primary"
           onClick={onOpenApifyModal}
           style={{
-            fontSize: "0.78rem",
-            padding: "0.48rem 0.95rem"
+            fontSize: "0.82rem",
+            padding: "0.48rem 1rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.45rem",
+            background: "#ff6200",
+            borderColor: "#ea580c"
           }}
         >
-          <Search size={14} color="#ffffff" />
-          <span>Apify</span>
+          <Search size={15} color="#ffffff" />
+          <span>Nova Busca de Leads</span>
         </button>
 
         {/* User Auth Modal Button */}
