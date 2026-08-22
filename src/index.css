@@ -207,9 +207,18 @@ body {
   animation: floatSlow 4s ease-in-out infinite;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
 /* Touch Targets & Accessibility Focus */
 button, a, input, select, textarea {
-  min-height: 40px;
+  min-height: 38px;
 }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
   outline: 2px solid var(--orange-primary);

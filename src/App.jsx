@@ -235,8 +235,16 @@ export default function App() {
       {/* Main Container Views */}
       <main className="app-container" style={{ flex: 1, paddingTop: "1.25rem", paddingBottom: "3rem" }}>
         
+        {dbLoading && (
+          <div className="glass-card" style={{ padding: "3rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
+            <div style={{ width: "40px", height: "40px", border: "3px solid #fed7aa", borderTopColor: "#ff6200", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+            <strong style={{ fontSize: "1.05rem", color: "#1c1917" }}>Conectando ao banco de dados Supabase...</strong>
+            <span style={{ fontSize: "0.82rem", color: "#78716c" }}>Sincronizando seus leads e inteligência comercial</span>
+          </div>
+        )}
+
         {/* 1. Prospectar Agora (Smart Queue) */}
-        {activeTab === "prospect_now" && (
+        {!dbLoading && activeTab === "prospect_now" && (
           <ProspectNowView 
             companies={companies}
             onSelectCompany={(comp) => setSelectedCompanyForProfile(comp)}
