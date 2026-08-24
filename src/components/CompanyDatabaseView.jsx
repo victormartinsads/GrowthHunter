@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { 
   Building2, Search, Filter, Download, Star, MapPin, Eye, Edit3, MessageCircle, Mail, Globe, 
-  CheckSquare, Square, Trash2, Tag, UserCheck 
+  CheckSquare, Square, Trash2, Tag, UserCheck, Send, Kanban 
 } from "lucide-react";
 import { normalizeSegment } from "../utils/segmentClassifier";
 import { buildWhatsappUrl, buildWebsiteUrl } from "../utils/helpers";
@@ -12,7 +12,8 @@ export default function CompanyDatabaseView({
   onOpenEditModal, 
   onOpenEmailModal, 
   onDeleteBatch,
-  onBatchUpdatePipelineStage
+  onBatchUpdatePipelineStage,
+  onOpenDispatchModal
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNiche, setSelectedNiche] = useState("TODOS");
@@ -334,6 +335,106 @@ export default function CompanyDatabaseView({
           </tbody>
         </table>
       </div>
+
+      {/* FLOATING BATCH ACTION BAR */}
+      {selectedIds.length > 0 && (
+        <div style={{
+          position: "fixed",
+          bottom: "1.5rem",
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#1c1917",
+          color: "#ffffff",
+          padding: "0.75rem 1.25rem",
+          borderRadius: "12px",
+          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)",
+          display: "flex",
+          alignItems: "center",
+          gap: "1.25rem",
+          zIndex: 100,
+          border: "1px solid #44403c"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span className="badge" style={{ background: "#ea580c", color: "#ffffff", fontWeight: "bold" }}>
+              {selectedIds.length}
+            </span>
+            <span style={{ fontSize: "0.85rem", fontWeight: "600" }}>
+              {selectedIds.length === 1 ? "empresa selecionada" : "empresas selecionadas"}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            {/* Enviar para Vendedora (WhatsApp) */}
+            {onOpenDispatchModal && (
+              <button 
+                type="button"
+                onClick={() => {
+                  const selectedList = companies.filter(c => selectedIds.includes(c.id));
+                  onOpenDispatchModal(selectedList);
+                }}
+                className="btn-primary"
+                style={{
+                  background: "#16a34a",
+                  borderColor: "#15803d",
+                  padding: "0.45rem 1rem",
+                  fontSize: "0.82rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  boxShadow: "0 2px 8px rgba(22, 163, 74, 0.25)"
+                }}
+                title="Enviar lista formatada para o WhatsApp da vendedora"
+              >
+                <Send size={15} color="#ffffff" />
+                <span>Enviar p/ Vendedora</span>
+              </button>
+            )}
+
+            {/* Excluir em Lote */}
+            {onDeleteBatch && (
+              <button 
+                type="button"
+                onClick={() => {
+                  onDeleteBatch(selectedIds);
+                  setSelectedIds([]);
+                }}
+                style={{
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "0.45rem 0.9rem",
+                  fontSize: "0.82rem",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem"
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Excluir</span>
+              </button>
+            )}
+
+            {/* Cancelar Seleção */}
+            <button 
+              type="button"
+              onClick={() => setSelectedIds([])}
+              style={{
+                background: "transparent",
+                color: "#a8a29e",
+                border: "none",
+                fontSize: "0.78rem",
+                cursor: "pointer",
+                padding: "0.35rem 0.5rem"
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { 
   Zap, Flame, Target, Star, Globe, AlertTriangle, CheckCircle2, XCircle, 
   MessageCircle, Mail, Phone, ChevronRight, UserCheck, ShieldAlert, ArrowUpRight, Copy, Check, Filter, Sparkles, Eye, MapPin,
-  Kanban, CheckSquare, Square, ArrowRight, Layers
+  Kanban, CheckSquare, Square, ArrowRight, Layers, Send, MessageSquare
 } from "lucide-react";
 import { normalizeSegment } from "../utils/segmentClassifier";
 import { buildWhatsappUrl } from "../utils/helpers";
@@ -15,7 +15,8 @@ export default function ProspectNowView({
   onBatchUpdatePipelineStage,
   onNavigateTab,
   onOpenEmailModal, 
-  onOpenApifyModal 
+  onOpenApifyModal,
+  onOpenDispatchModal
 }) {
   const [filterCategory, setFilterCategory] = useState("TODOS");
   const [copiedId, setCopiedId] = useState(null);
@@ -221,6 +222,32 @@ export default function ProspectNowView({
                 ))}
               </select>
             </div>
+
+            {/* Enviar para Vendedora (WhatsApp) */}
+            {onOpenDispatchModal && (
+              <button 
+                type="button"
+                onClick={() => {
+                  const selectedList = rankedCompanies.filter(c => selectedIds.has(c.id));
+                  onOpenDispatchModal(selectedList);
+                }}
+                className="btn-primary"
+                style={{
+                  background: "#16a34a",
+                  borderColor: "#15803d",
+                  padding: "0.5rem 1.1rem",
+                  fontSize: "0.85rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.45rem",
+                  boxShadow: "0 2px 8px rgba(22, 163, 74, 0.25)"
+                }}
+                title="Exportar dados formatados com links diretos para o WhatsApp da vendedora"
+              >
+                <Send size={16} color="#ffffff" />
+                <span>Enviar p/ Vendedora</span>
+              </button>
+            )}
 
             {/* Send to Kanban Button */}
             <button 

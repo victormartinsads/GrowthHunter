@@ -16,6 +16,7 @@ import LeadProfileModal from "./components/LeadProfileModal";
 import LeadEditModal from "./components/LeadEditModal";
 import EmailProspectingModal from "./components/EmailProspectingModal";
 import CommandPaletteModal from "./components/CommandPaletteModal";
+import DispatchLeadsModal from "./components/DispatchLeadsModal";
 import AuthModal from "./components/AuthModal";
 import ToastNotification from "./components/ToastNotification";
 
@@ -105,6 +106,8 @@ export default function App() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [emailTargetCompany, setEmailTargetCompany] = useState(null);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
+  const [dispatchTargetCompanies, setDispatchTargetCompanies] = useState([]);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
@@ -113,6 +116,15 @@ export default function App() {
 
   const showToast = (message, type = "info", duration = 3500) => {
     setToast({ message, type, duration });
+  };
+
+  const handleOpenDispatchModal = (selectedList) => {
+    if (!selectedList || selectedList.length === 0) {
+      showToast("Selecione pelo menos um lead para enviar para a vendedora.", "warning");
+      return;
+    }
+    setDispatchTargetCompanies(selectedList);
+    setIsDispatchModalOpen(true);
   };
 
   // ── Boot: migrar localStorage → Supabase (primeira vez) e carregar dados ──
@@ -266,6 +278,7 @@ export default function App() {
             onNavigateTab={setActiveTab}
             onOpenEmailModal={(comp) => { setEmailTargetCompany(comp); setIsEmailModalOpen(true); }}
             onOpenApifyModal={() => setIsApifyModalOpen(true)}
+            onOpenDispatchModal={handleOpenDispatchModal}
           />
         )}
 
@@ -295,6 +308,7 @@ export default function App() {
             onOpenEmailModal={(comp) => { setEmailTargetCompany(comp); setIsEmailModalOpen(true); }}
             onDeleteBatch={handleDeleteBatch}
             onBatchUpdatePipelineStage={handleBatchUpdatePipelineStage}
+            onOpenDispatchModal={handleOpenDispatchModal}
           />
         )}
 
@@ -393,6 +407,13 @@ export default function App() {
         currentUser={currentUser}
         onLogin={(userData) => { setCurrentUser(userData); showToast(`Autenticado como ${userData.name}`, "success"); }}
         onRegister={(userData) => { setCurrentUser(userData); showToast(`Organização ${userData.orgName} registrada!`, "success"); }}
+      />
+
+      {/* Modal Disparo de Leads para Vendedora (WhatsApp) */}
+      <DispatchLeadsModal 
+        isOpen={isDispatchModalOpen}
+        onClose={() => setIsDispatchModalOpen(false)}
+        selectedCompanies={dispatchTargetCompanies}
       />
 
       {/* Toast Notification Banner */}
