@@ -4,7 +4,7 @@ import {
   CheckSquare, Square, Trash2, Tag, UserCheck, Send, Kanban 
 } from "lucide-react";
 import { normalizeSegment } from "../utils/segmentClassifier";
-import { buildWhatsappUrl, buildWebsiteUrl } from "../utils/helpers";
+import { buildWhatsappUrl, buildWebsiteUrl, buildGoogleMapsUrl } from "../utils/helpers";
 
 export default function CompanyDatabaseView({ 
   companies = [], 
@@ -325,6 +325,16 @@ export default function CompanyDatabaseView({
                             <MessageCircle size={14} />
                           </a>
                         )}
+                        <a 
+                          href={buildGoogleMapsUrl(company)} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="btn-secondary" 
+                          title="Abrir Ficha no Google Meu Negócio / Maps" 
+                          style={{ padding: "0.35rem 0.55rem", color: "#166534", background: "#f0fdf4", borderColor: "#bbf7d0" }}
+                        >
+                          <MapPin size={14} color="#16a34a" />
+                        </a>
                       </div>
                     </td>
 

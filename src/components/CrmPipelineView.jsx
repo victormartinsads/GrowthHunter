@@ -4,7 +4,7 @@ import {
   Filter, Search, DollarSign, Users, TrendingUp, Layers, CheckCircle2, Star, Phone, ArrowUpRight
 } from "lucide-react";
 import { PIPELINE_STAGES } from "../types/growthHunter";
-import { buildWhatsappUrl } from "../utils/helpers";
+import { buildWhatsappUrl, buildGoogleMapsUrl } from "../utils/helpers";
 import { normalizeSegment } from "../utils/segmentClassifier";
 
 export default function CrmPipelineView({ 
@@ -318,30 +318,57 @@ export default function CrmPipelineView({
                         {!hasWebsite ? "🚨 Sem Site (Criação)" : "🌐 Tráfego / Reformulação"} • R$ {estimatedValue}
                       </div>
 
-                      {/* Card Action Buttons (WhatsApp + Navigation) */}
+                      {/* Card Action Buttons (WhatsApp + Google Maps + Navigation) */}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "0.4rem", borderTop: "1px solid #f5f5f4" }}>
                         
-                        {/* WhatsApp Trigger */}
-                        <button
-                          type="button"
-                          onClick={() => handleWhatsApp(company.phone, company)}
-                          style={{
-                            background: "#16a34a",
-                            color: "#ffffff",
-                            border: "none",
-                            borderRadius: "4px",
-                            padding: "0.3rem 0.55rem",
-                            fontSize: "0.72rem",
-                            fontWeight: "700",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.3rem"
-                          }}
-                        >
-                          <MessageCircle size={12} />
-                          <span>Whats</span>
-                        </button>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          {/* WhatsApp Trigger */}
+                          <button
+                            type="button"
+                            onClick={() => handleWhatsApp(company.phone, company)}
+                            style={{
+                              background: "#16a34a",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: "4px",
+                              padding: "0.3rem 0.55rem",
+                              fontSize: "0.72rem",
+                              fontWeight: "700",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.3rem"
+                            }}
+                          >
+                            <MessageCircle size={12} />
+                            <span>Whats</span>
+                          </button>
+
+                          {/* Ficha Google Meu Negócio / Maps */}
+                          <a
+                            href={buildGoogleMapsUrl(company)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Abrir Ficha no Google Meu Negócio / Maps"
+                            style={{
+                              background: "#f0fdf4",
+                              border: "1px solid #bbf7d0",
+                              color: "#166534",
+                              borderRadius: "4px",
+                              padding: "0.3rem 0.45rem",
+                              fontSize: "0.7rem",
+                              fontWeight: "700",
+                              textDecoration: "none",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.2rem"
+                            }}
+                          >
+                            <MapPin size={11} color="#16a34a" />
+                            <span>Ficha GMB</span>
+                            <ArrowUpRight size={10} />
+                          </a>
+                        </div>
 
                         {/* Stage Mover Buttons (Left / Right) */}
                         <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>

@@ -5,7 +5,7 @@ import {
   Kanban, CheckSquare, Square, ArrowRight, Layers, Send, MessageSquare
 } from "lucide-react";
 import { normalizeSegment } from "../utils/segmentClassifier";
-import { buildWhatsappUrl } from "../utils/helpers";
+import { buildWhatsappUrl, buildGoogleMapsUrl } from "../utils/helpers";
 import { PIPELINE_STAGES } from "../types/growthHunter";
 
 export default function ProspectNowView({ 
@@ -593,6 +593,30 @@ export default function ProspectNowView({
                     <Kanban size={14} color="#f59e0b" />
                     <span>Marcar Contactado</span>
                   </button>
+
+                  {/* Ficha Google Meu Negócio / Maps */}
+                  <a 
+                    href={buildGoogleMapsUrl(company)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary"
+                    style={{
+                      padding: "0.5rem 0.85rem",
+                      fontSize: "0.82rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                      textDecoration: "none",
+                      color: "#166534",
+                      background: "#f0fdf4",
+                      borderColor: "#bbf7d0"
+                    }}
+                    title="Abrir Ficha no Google Meu Negócio / Maps"
+                  >
+                    <MapPin size={14} color="#16a34a" />
+                    <span>Ficha Google</span>
+                    <ArrowUpRight size={12} />
+                  </a>
                 </div>
 
                 <button 

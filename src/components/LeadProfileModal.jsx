@@ -4,7 +4,7 @@ import {
   MessageCircle, Edit3, ShieldAlert, CheckCircle2, AlertTriangle, Camera, Link2
 } from "lucide-react";
 import { normalizeSegment } from "../utils/segmentClassifier";
-import { buildWhatsappUrl } from "../utils/helpers";
+import { buildWhatsappUrl, buildGoogleMapsUrl } from "../utils/helpers";
 
 export default function LeadProfileModal({ company, onClose, onOpenEditModal }) {
   if (!company) return null;
@@ -102,6 +102,30 @@ export default function LeadProfileModal({ company, onClose, onOpenEditModal }) 
                   🚨 SEM WEBSITE CADASTRADO
                 </span>
               )}
+
+              {/* Ficha Google Meu Negócio / Maps */}
+              <a 
+                href={buildGoogleMapsUrl(company)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary"
+                style={{
+                  fontSize: "0.78rem",
+                  padding: "0.2rem 0.6rem",
+                  color: "#166534",
+                  borderColor: "#bbf7d0",
+                  background: "#f0fdf4",
+                  fontWeight: "700",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.3rem"
+                }}
+                title="Abrir Ficha no Google Meu Negócio / Maps"
+              >
+                <MapPin size={13} color="#16a34a" />
+                <span>Ficha Google Meu Negócio</span>
+                <ArrowUpRight size={13} />
+              </a>
             </div>
           </div>
 

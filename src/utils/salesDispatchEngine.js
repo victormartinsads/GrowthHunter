@@ -1,4 +1,5 @@
 import { normalizeSegment } from "./segmentClassifier";
+import { buildGoogleMapsUrl } from "./helpers";
 
 /**
  * GrowthHunter — GERADOR DE PACOTE DE LEADS PARA DISPARO NO WHATSAPP DA VENDEDORA
@@ -69,6 +70,7 @@ export const generateSalespersonDispatchMessage = (selectedCompanies = [], sales
     leadBlock += `📧 *E-mail:* ${email}\n`;
     leadBlock += `🌐 *Situação do Site:* ${siteSituation}\n`;
     leadBlock += `🎯 *Oferta:* ${primaryOffer} (~R$ ${estimatedValue.toLocaleString('pt-BR')})\n`;
+    leadBlock += `🗺️ *Ficha Google Meu Negócio:* ${buildGoogleMapsUrl(comp)}\n`;
     if (phone) {
       leadBlock += `📲 *Chamar no WhatsApp (1 Toque):*\n${whatsappLink}\n`;
     }

@@ -80,3 +80,20 @@ export const buildWebsiteUrl = (urlInput) => {
   }
   return str;
 };
+
+/**
+ * Gera URL oficial direta da Ficha do Google Meu Negócio / Google Maps
+ */
+export const buildGoogleMapsUrl = (company) => {
+  if (!company) return "";
+  if (company.google_maps_url && String(company.google_maps_url).startsWith("http")) {
+    return company.google_maps_url;
+  }
+  if (company.maps_url && String(company.maps_url).startsWith("http")) {
+    return company.maps_url;
+  }
+  const query = [company.name, company.address, company.neighborhood, company.city, company.state]
+    .filter(Boolean)
+    .join(" ");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+};
