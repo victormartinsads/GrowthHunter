@@ -16,7 +16,8 @@ import {
   Command,
   ChevronDown,
   Sparkles,
-  Sliders
+  Sliders,
+  Smartphone
 } from "lucide-react";
 
 export default function Navbar({ 
@@ -84,6 +85,7 @@ export default function Navbar({
 
   // Secondary Tools (Progressive Disclosure)
   const secondaryTabs = [
+    { id: "salesperson_app", label: "Fila da Vendedora (Mobile App)", icon: Smartphone, desc: "Modo de prospecção rápida 1-toque no celular" },
     { id: "dashboard", label: "Dashboard & Métricas", icon: BarChart3, desc: "Desempenho e volume de prospecção" },
     { id: "whatsapp_settings", label: "Configuração WhatsApp Cloud", icon: MessageCircle, desc: "Tokens e WABA ID Oficial" },
     { id: "settings", label: "Configurações de Chaves API", icon: SettingsIcon, desc: "Supabase, OpenAI, Apify, PageSpeed" },

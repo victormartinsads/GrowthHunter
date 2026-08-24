@@ -88,16 +88,31 @@ export const OPPORTUNITY_TYPES = {
 };
 
 export const PIPELINE_STAGES = [
-  { id: "NEW", title: "Novo Lead", color: "#94a3b8", probability: 0.1 },
-  { id: "QUALIFIED", title: "Qualificado", color: "#38bdf8", probability: 0.2 },
-  { id: "CONTACTED", title: "Contactado", color: "#f59e0b", probability: 0.3 },
-  { id: "REPLIED", title: "Respondeu", color: "#a855f7", probability: 0.4 },
-  { id: "MEETING", title: "Reunião Agendada", color: "#06b6d4", probability: 0.6 },
-  { id: "PROPOSAL", title: "Proposta Enviada", color: "#ec4899", probability: 0.75 },
-  { id: "NEGOTIATION", title: "Em Negociação", color: "#f97316", probability: 0.85 },
-  { id: "WON", title: "Cliente Fechado (Venda)", color: "#10b981", probability: 1.0 },
-  { id: "LOST", title: "Perdido", color: "#ef4444", probability: 0.0 },
-  { id: "NURTURE", title: "Nutrição Futura", color: "#64748b", probability: 0.15 }
+  { id: "NEW", title: "Novo Lead", color: "#94a3b8", probability: 0.1, badgeBg: "#f1f5f9", badgeColor: "#475569" },
+  { id: "QUALIFIED", title: "Qualificado", color: "#38bdf8", probability: 0.25, badgeBg: "#f0f9ff", badgeColor: "#0284c7" },
+  { id: "CONTACTED", title: "Contactado", color: "#f59e0b", probability: 0.4, badgeBg: "#fffbeb", badgeColor: "#d97706" },
+  { id: "MEETING", title: "Reunião Agendada", color: "#06b6d4", probability: 0.6, badgeBg: "#ecfeff", badgeColor: "#0891b2" },
+  { id: "PROPOSAL", title: "Proposta Enviada", color: "#ea580c", probability: 0.8, badgeBg: "#fff7ed", badgeColor: "#ea580c" },
+  { id: "WON", title: "Cliente Fechado", color: "#10b981", probability: 1.0, badgeBg: "#f0fdf4", badgeColor: "#16a34a" },
+  { id: "LOST", title: "Perdido", color: "#ef4444", probability: 0.0, badgeBg: "#fef2f2", badgeColor: "#dc2626" }
+];
+
+export const LOST_REASONS = [
+  "Preço / Sem Orçamento",
+  "Já possui agência / prestador",
+  "Sem interesse no momento",
+  "Não respondeu aos 5 toques",
+  "Decisor inalcançável",
+  "Concorrente fechou antes",
+  "Outro motivo"
+];
+
+export const CADENCE_TOUCHES = [
+  { day: 0, name: "Toque 1 (D+0)", title: "Gancho Visual & Quebra de Padrão", type: "whatsapp" },
+  { day: 2, name: "Toque 2 (D+2)", title: "Áudio Casual de 20s com Diagnóstico", type: "audio" },
+  { day: 4, name: "Toque 3 (D+4)", title: "Exemplo Prático do Concorrente", type: "whatsapp" },
+  { day: 7, name: "Toque 4 (D+7)", title: "Link do Dossiê Raio-X Visual", type: "dossier" },
+  { day: 10, name: "Toque 5 (D+10)", title: "Break-up Message Amigável", type: "breakup" }
 ];
 
 export const TECH_STATUS = {

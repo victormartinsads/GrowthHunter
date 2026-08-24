@@ -10,6 +10,7 @@ import SettingsView from "./components/SettingsView";
 import WhatsAppInboxView from "./components/WhatsAppInboxView";
 import WhatsAppSettingsView from "./components/WhatsAppSettingsView";
 import SystemHealthView from "./components/SystemHealthView";
+import SalespersonMobileApp from "./components/SalespersonMobileApp";
 
 import ApifyLeadFinderModal from "./components/ApifyLeadFinderModal";
 import LeadProfileModal from "./components/LeadProfileModal";
@@ -17,6 +18,8 @@ import LeadEditModal from "./components/LeadEditModal";
 import EmailProspectingModal from "./components/EmailProspectingModal";
 import CommandPaletteModal from "./components/CommandPaletteModal";
 import DispatchLeadsModal from "./components/DispatchLeadsModal";
+import DossierModal from "./components/DossierModal";
+import LeadQuickDrawer from "./components/LeadQuickDrawer";
 import AuthModal from "./components/AuthModal";
 import ToastNotification from "./components/ToastNotification";
 
@@ -102,6 +105,9 @@ export default function App() {
   // Modals states
   const [isApifyModalOpen, setIsApifyModalOpen] = useState(false);
   const [selectedCompanyForProfile, setSelectedCompanyForProfile] = useState(null);
+  const [selectedLeadForDrawer, setSelectedLeadForDrawer] = useState(null);
+  const [dossierCompany, setDossierCompany] = useState(null);
+  const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [emailTargetCompany, setEmailTargetCompany] = useState(null);
@@ -312,14 +318,24 @@ export default function App() {
           />
         )}
 
-        {/* 5. Pipeline CRM */}
+        {/* 5. Pipeline CRM Enterprise */}
         {activeTab === "pipeline" && (
           <CrmPipelineView 
             companies={companies}
             onUpdatePipelineStage={handleUpdatePipelineStage}
-            onSelectCompany={(comp) => setSelectedCompanyForProfile(comp)}
+            onSelectCompany={(comp) => setSelectedLeadForDrawer(comp)}
             onOpenEditModal={(comp) => { setEditingCompany(comp); setIsEditModalOpen(true); }}
             onOpenEmailModal={(comp) => { setEmailTargetCompany(comp); setIsEmailModalOpen(true); }}
+            onOpenDossier={(comp) => { setDossierCompany(comp); setIsDossierModalOpen(true); }}
+          />
+        )}
+
+        {/* 5.1 Fila da Vendedora Mobile App */}
+        {activeTab === "salesperson_app" && (
+          <SalespersonMobileApp 
+            companies={companies}
+            onUpdatePipelineStage={handleUpdatePipelineStage}
+            salespersonName={currentUser?.name || "Amanda"}
           />
         )}
 
@@ -414,6 +430,24 @@ export default function App() {
         isOpen={isDispatchModalOpen}
         onClose={() => setIsDispatchModalOpen(false)}
         selectedCompanies={dispatchTargetCompanies}
+      />
+
+      {/* Quick Drawer Lateral (Zoho / Odoo style) */}
+      <LeadQuickDrawer 
+        isOpen={Boolean(selectedLeadForDrawer)}
+        company={selectedLeadForDrawer}
+        onClose={() => setSelectedLeadForDrawer(null)}
+        onUpdateStage={handleUpdatePipelineStage}
+        onOpenDossier={(c) => { setDossierCompany(c); setIsDossierModalOpen(true); }}
+        onOpenEditModal={(c) => { setEditingCompany(c); setIsEditModalOpen(true); }}
+        onOpenEmailModal={(c) => { setEmailTargetCompany(c); setIsEmailModalOpen(true); }}
+      />
+
+      {/* Dossiê Raio-X Visual Modal */}
+      <DossierModal 
+        isOpen={isDossierModalOpen}
+        company={dossierCompany}
+        onClose={() => setIsDossierModalOpen(false)}
       />
 
       {/* Toast Notification Banner */}
