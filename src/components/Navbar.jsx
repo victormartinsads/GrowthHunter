@@ -19,6 +19,7 @@ import {
   Sliders,
   Smartphone
 } from "lucide-react";
+import InstagramIcon from "./icons/InstagramIcon";
 
 export default function Navbar({ 
   activeTab, 
@@ -53,6 +54,12 @@ export default function Navbar({
       icon: Zap, 
       badge: hotCompaniesCount > 0 ? `${hotCompaniesCount} HOT` : null, 
       highlight: true 
+    },
+    { 
+      id: "instagram", 
+      label: "Instagram Direct", 
+      icon: InstagramIcon, 
+      highlight: false 
     },
     { 
       id: "pipeline", 

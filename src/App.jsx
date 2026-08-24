@@ -11,6 +11,7 @@ import WhatsAppInboxView from "./components/WhatsAppInboxView";
 import WhatsAppSettingsView from "./components/WhatsAppSettingsView";
 import SystemHealthView from "./components/SystemHealthView";
 import SalespersonMobileApp from "./components/SalespersonMobileApp";
+import InstagramProspectingView from "./components/InstagramProspectingView";
 
 import ApifyLeadFinderModal from "./components/ApifyLeadFinderModal";
 import LeadProfileModal from "./components/LeadProfileModal";
@@ -285,6 +286,15 @@ export default function App() {
             onOpenEmailModal={(comp) => { setEmailTargetCompany(comp); setIsEmailModalOpen(true); }}
             onOpenApifyModal={() => setIsApifyModalOpen(true)}
             onOpenDispatchModal={handleOpenDispatchModal}
+          />
+        )}
+
+        {/* 1.1 Instagram Direct Hunter */}
+        {activeTab === "instagram" && (
+          <InstagramProspectingView 
+            onImportLeadToCrm={handleSaveCompany}
+            onOpenDispatchModal={handleOpenDispatchModal}
+            showToast={showToast}
           />
         )}
 
