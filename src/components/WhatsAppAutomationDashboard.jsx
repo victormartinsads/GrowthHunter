@@ -34,11 +34,11 @@ export default function WhatsAppAutomationDashboard({
   const [chatSidebarTab, setChatSidebarTab] = useState("chats"); // "chats" | "crm"
   const [chatSearchQuery, setChatSearchQuery] = useState("");
 
-  // Automation Rules State
+  // Automation Rules State (Desativadas por padrão)
   const [rules, setRules] = useState({
-    welcomeEnabled: true,
+    welcomeEnabled: false,
     welcomeMessage: "Olá! Obrigado por entrar em contato com a nossa equipe. Em instantes um de nossos consultores vai te atender!",
-    officeHoursEnabled: true,
+    officeHoursEnabled: false,
     officeHoursStart: "08:00",
     officeHoursEnd: "18:00",
     officeHoursMessage: "Olá! Nosso horário de atendimento é de Segunda a Sexta das 08h às 18h. Deixe sua mensagem e responderemos logo no início do expediente!",
@@ -47,19 +47,19 @@ export default function WhatsAppAutomationDashboard({
         id: "rule_preco",
         keyword: "preço, valor, quanto custa, orçamento",
         replyText: "Trabalhamos com projetos sob medida para o seu nicho! Para te passar a proposta exata, qual é o segmento da sua empresa e a cidade?",
-        enabled: true
+        enabled: false
       },
       {
         id: "rule_reuniao",
         keyword: "reunião, agendar, horário, marcar",
         replyText: "Excelente! Tenho horários disponíveis amanhã às 14h ou 16h para uma apresentação rápida de 15 minutos. Qual fica melhor para você?",
-        enabled: true
+        enabled: false
       },
       {
         id: "rule_site",
         keyword: "site, landing page, reformulação",
         replyText: "Desenvolvemos páginas ultra-rápidas otimizadas para celular com botão direto de WhatsApp e Meta Pixel configurado. Quer que eu te envie 2 exemplos reais?",
-        enabled: true
+        enabled: false
       }
     ]
   });
