@@ -7,6 +7,7 @@ import {
   getRealChats,
   sendWhatsAppRealMessage, 
   sendWhatsAppAudioMessage,
+  sendWhatsAppMediaMessage,
   getStoredMessages, 
   getAutomationRules, 
   updateAutomationRules, 
@@ -1033,6 +1034,24 @@ app.post("/api/whatsapp/send-audio", async (req, res) => {
   }
 
   const result = await sendWhatsAppAudioMessage(phone, audioBase64);
+  return res.json(result);
+});
+
+// 4.06 Enviar MÍDIA Real (Foto, PDF/Documento, Vídeo)
+app.post("/api/whatsapp/send-media", async (req, res) => {
+  const { phone, mediaBase64, mediaType, mimeType, fileName, caption } = req.body;
+
+  if (!phone || !mediaBase64) {
+    return res.status(400).json({ error: "Telefone e mídia base64 são obrigatórios." });
+  }
+
+  const result = await sendWhatsAppMediaMessage(phone, {
+    mediaBase64,
+    mediaType: mediaType || "image",
+    mimeType: mimeType || "image/jpeg",
+    fileName: fileName || "",
+    caption: caption || ""
+  });
   return res.json(result);
 });
 

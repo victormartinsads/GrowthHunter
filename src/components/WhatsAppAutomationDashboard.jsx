@@ -4,7 +4,9 @@ import {
   Settings, CheckCircle2, XCircle, RefreshCw, Smartphone, Bot, 
   Layers, Users, Share2, ArrowRight, Zap, Filter, Search, Plus, 
   Trash2, Copy, Check, ExternalLink, Calendar, AlertTriangle,
-  Mic, Square, Volume2, Play, Pause, Image as ImageIcon
+  Mic, Square, Volume2, Play, Pause, Image as ImageIcon,
+  Smile, Paperclip, FileText, Video, Bold, Italic, Strikethrough,
+  Code, Download, Eye, X
 } from "lucide-react";
 import { buildWhatsappUrl, buildGoogleMapsUrl } from "../utils/helpers";
 import { normalizeSegment } from "../utils/segmentClassifier";
@@ -286,6 +288,99 @@ export default function WhatsAppAutomationDashboard({
 
     mediaRecorderRef.current.stop();
   };
+
+  // ── Mídia (Fotos, Documentos, Vídeos) ──
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showFormattingMenu, setShowFormattingMenu] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState(null);
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+
+  const fileInputImageRef = React.useRef(null);
+  const fileInputDocRef = React.useRef(null);
+  const fileInputVideoRef = React.useRef(null);
+
+  const handleFileSelect = (e, mediaType) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      setSelectedMedia({
+        file,
+        mediaType,
+        mimeType: file.type || (mediaType === "document" ? "application/pdf" : "image/jpeg"),
+        fileName: file.name,
+        base64: reader.result,
+        previewUrl: mediaType === "image" ? reader.result : null
+      });
+      setMediaCaption("");
+      setShowAttachMenu(false);
+    };
+    e.target.value = "";
+  };
+
+  const handleSendMedia = async () => {
+    if (!selectedMedia || !activeChatPhone) return;
+    const cleanPhone = String(activeChatPhone).replace(/\D/g, "");
+    setIsUploadingMedia(true);
+
+    try {
+      const res = await fetch("http://localhost:3001/api/whatsapp/send-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: cleanPhone,
+          mediaBase64: selectedMedia.base64,
+          mediaType: selectedMedia.mediaType,
+          mimeType: selectedMedia.mimeType,
+          fileName: selectedMedia.fileName,
+          caption: mediaCaption
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showToast?.(`✅ ${selectedMedia.mediaType === "image" ? "Foto enviada" : "Documento enviado"} com sucesso!`, "success");
+        setSelectedMedia(null);
+        setMediaCaption("");
+
+        const msgRes = await fetch("http://localhost:3001/api/whatsapp/messages");
+        if (msgRes.ok) {
+          const msgData = await msgRes.json();
+          if (msgData.messages) setMessages(msgData.messages);
+        }
+      } else {
+        showToast?.(data.error || "Falha ao enviar mídia.", "error");
+      }
+    } catch (err) {
+      showToast?.("Erro ao enviar arquivo para o WhatsApp.", "error");
+    } finally {
+      setIsUploadingMedia(false);
+    }
+  };
+
+  const insertEmoji = (emoji) => {
+    setChatInput(prev => prev + emoji);
+  };
+
+  const insertFormatting = (formatType) => {
+    if (formatType === "bold") setChatInput(prev => prev ? `${prev} *negrito*` : "*negrito*");
+    if (formatType === "italic") setChatInput(prev => prev ? `${prev} _itálico_` : "_itálico_");
+    if (formatType === "strike") setChatInput(prev => prev ? `${prev} ~tachado~` : "~tachado~");
+    if (formatType === "code") setChatInput(prev => prev ? `${prev} \`\`\`código\`\`\`` : "```código```");
+    setShowFormattingMenu(false);
+  };
+
+  const EMOJI_LIST = [
+    "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", 
+    "🙂", "😉", "😌", "😍", "🥰", "😘", "😋", "😜", "🤪", "😎", 
+    "🤓", "🧐", "🥳", "👍", "👎", "👏", "🙌", "🤝", "🙏", "💪", 
+    "🚀", "🔥", "⭐", "💡", "🎯", "💰", "💵", "📈", "📊", "💼", 
+    "📱", "💻", "📧", "📍", "⏰", "⏳", "✅", "❌", "💬", "📞"
+  ];
 
   const handleAddKeywordRule = (e) => {
     e.preventDefault();
@@ -862,13 +957,15 @@ export default function WhatsAppAutomationDashboard({
                       Nenhuma mensagem trocada ainda com este contato
                     </strong>
                     <p style={{ fontSize: "0.78rem", color: "#64748b", margin: "0.4rem 0 0 0", lineHeight: "1.4" }}>
-                      Digite sua mensagem ou grave um áudio no campo abaixo para conversar pelo WhatsApp em tempo real.
+                      Envie mensagens de texto, áudio de voz, fotos ou documentos pelo WhatsApp em tempo real.
                     </p>
                   </div>
                 ) : (
                   currentChatMessages.map(msg => {
                     const isOutbound = msg.direction === "OUTBOUND";
-                    const isAudio = msg.type === "AUDIO" || Boolean(msg.audioBase64) || (msg.content && msg.content.includes("Áudio"));
+                    const isAudio = msg.type === "AUDIO" || Boolean(msg.mediaUrl && msg.mediaUrl.startsWith("data:audio"));
+                    const isImage = msg.type === "IMAGE" || Boolean(msg.mediaUrl && msg.mediaUrl.startsWith("data:image"));
+                    const isDoc = msg.type === "DOCUMENT" || Boolean(msg.fileName);
 
                     return (
                       <div
@@ -883,23 +980,59 @@ export default function WhatsAppAutomationDashboard({
                           border: isOutbound ? "none" : "1px solid #e2e8f0"
                         }}
                       >
-                        {isAudio ? (
+                        {/* Audio Message */}
+                        {isAudio && (
                           <div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginBottom: "0.35rem", fontSize: "0.78rem", fontWeight: "700", color: "#15803d" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginBottom: "0.4rem", fontSize: "0.76rem", fontWeight: "700", color: "#15803d" }}>
                               <Mic size={14} color="#16a34a" />
-                              <span>Mensagem de Áudio (Voz)</span>
+                              <span>Mensagem de Voz</span>
                             </div>
-                            {msg.audioBase64 ? (
-                              <audio
-                                src={msg.audioBase64}
-                                controls
-                                style={{ height: "36px", width: "240px", borderRadius: "20px" }}
-                              />
+                            {msg.mediaUrl ? (
+                              <audio src={msg.mediaUrl} controls style={{ height: "36px", width: "240px", borderRadius: "20px" }} />
                             ) : (
-                              <span style={{ fontSize: "0.75rem", color: "#64748b" }}>🎵 Áudio recebido no WhatsApp</span>
+                              <span style={{ fontSize: "0.75rem", color: "#64748b" }}>🎵 Nota de Voz do WhatsApp</span>
                             )}
                           </div>
-                        ) : (
+                        )}
+
+                        {/* Image Message */}
+                        {isImage && (
+                          <div>
+                            {msg.mediaUrl && (
+                              <img
+                                src={msg.mediaUrl}
+                                alt="Foto enviada"
+                                style={{ maxWidth: "260px", maxHeight: "200px", borderRadius: "8px", objectFit: "cover", display: "block", marginBottom: "0.4rem" }}
+                              />
+                            )}
+                            {msg.content && msg.content !== "📷 Foto" && (
+                              <p style={{ margin: 0, fontSize: "0.82rem", color: "#0f172a", lineHeight: "1.4" }}>
+                                {msg.content}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Document Message */}
+                        {isDoc && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "rgba(0,0,0,0.04)", padding: "0.5rem 0.75rem", borderRadius: "6px" }}>
+                            <FileText size={24} color="#0284c7" />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <strong style={{ fontSize: "0.8rem", color: "#0f172a", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {msg.fileName || msg.content || "Documento"}
+                              </strong>
+                              <span style={{ fontSize: "0.68rem", color: "#64748b" }}>Arquivo anexado</span>
+                            </div>
+                            {msg.mediaUrl && (
+                              <a href={msg.mediaUrl} download={msg.fileName || "documento.pdf"} style={{ color: "#0284c7" }} title="Baixar Arquivo">
+                                <Download size={16} />
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Plain Text Message */}
+                        {!isAudio && !isImage && !isDoc && (
                           <p style={{ margin: 0, fontSize: "0.84rem", color: "#0f172a", lineHeight: "1.4", whiteSpace: "pre-wrap" }}>
                             {msg.content}
                           </p>
@@ -914,8 +1047,113 @@ export default function WhatsAppAutomationDashboard({
                 )}
               </div>
 
-              {/* Input Form & Voice Recording Bar */}
-              <div style={{ padding: "0.85rem 1.25rem", background: "#ffffff", borderTop: "1px solid #e2e8f0" }}>
+              {/* Media Preview Modal Before Sending */}
+              {selectedMedia && (
+                <div style={{
+                  padding: "0.85rem 1.25rem",
+                  background: "#f0fdf4",
+                  borderTop: "1.5px solid #86efac",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "1rem"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    {selectedMedia.previewUrl ? (
+                      <img src={selectedMedia.previewUrl} alt="Preview" style={{ width: "48px", height: "48px", borderRadius: "6px", objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ width: "48px", height: "48px", background: "#dcfce7", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <FileText size={24} color="#16a34a" />
+                      </div>
+                    )}
+                    <div>
+                      <strong style={{ fontSize: "0.82rem", color: "#166534", display: "block" }}>
+                        {selectedMedia.fileName}
+                      </strong>
+                      <input
+                        type="text"
+                        placeholder="Adicionar legenda (opcional)..."
+                        value={mediaCaption}
+                        onChange={(e) => setMediaCaption(e.target.value)}
+                        style={{ fontSize: "0.76rem", padding: "0.25rem 0.5rem", borderRadius: "4px", border: "1px solid #bbf7d0", width: "220px", marginTop: "4px" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMedia(null)}
+                      style={{ background: "#ffffff", border: "1px solid #fca5a5", color: "#dc2626", borderRadius: "6px", padding: "0.35rem 0.65rem", fontSize: "0.74rem", cursor: "pointer" }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isUploadingMedia}
+                      onClick={handleSendMedia}
+                      className="btn-primary"
+                      style={{ background: "#16a34a", border: "none", padding: "0.35rem 0.85rem", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "0.3rem" }}
+                    >
+                      <Send size={13} />
+                      <span>{isUploadingMedia ? "Enviando..." : "Enviar Mídia"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Hidden File Inputs */}
+              <input type="file" ref={fileInputImageRef} accept="image/*" style={{ display: "none" }} onChange={(e) => handleFileSelect(e, "image")} />
+              <input type="file" ref={fileInputDocRef} accept=".pdf,.doc,.docx,.xlsx,.txt,.csv" style={{ display: "none" }} onChange={(e) => handleFileSelect(e, "document")} />
+              <input type="file" ref={fileInputVideoRef} accept="video/*" style={{ display: "none" }} onChange={(e) => handleFileSelect(e, "video")} />
+
+              {/* Emoji Picker Popover */}
+              {showEmojiPicker && (
+                <div style={{
+                  padding: "0.65rem",
+                  background: "#ffffff",
+                  borderTop: "1px solid #e2e8f0",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(10, 1fr)",
+                  gap: "0.35rem",
+                  maxHeight: "130px",
+                  overflowY: "auto"
+                }}>
+                  {EMOJI_LIST.map((emoji, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => insertEmoji(emoji)}
+                      style={{ background: "transparent", border: "none", fontSize: "1.2rem", cursor: "pointer", padding: "0.2rem", borderRadius: "4px" }}
+                      onMouseEnter={(e) => e.target.style.background = "#f1f5f9"}
+                      onMouseLeave={(e) => e.target.style.background = "transparent"}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Formatting Toolbar */}
+              {showFormattingMenu && (
+                <div style={{
+                  padding: "0.4rem 1rem",
+                  background: "#f8fafc",
+                  borderTop: "1px solid #e2e8f0",
+                  display: "flex",
+                  gap: "0.6rem",
+                  alignItems: "center"
+                }}>
+                  <span style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600" }}>Formatação rápida:</span>
+                  <button type="button" onClick={() => insertFormatting("bold")} style={{ background: "#ffffff", border: "1px solid #cbd5e1", padding: "0.2rem 0.5rem", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", fontWeight: "bold" }}><b>B</b> Negrito</button>
+                  <button type="button" onClick={() => insertFormatting("italic")} style={{ background: "#ffffff", border: "1px solid #cbd5e1", padding: "0.2rem 0.5rem", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", fontStyle: "italic" }}><i>I</i> Itálico</button>
+                  <button type="button" onClick={() => insertFormatting("strike")} style={{ background: "#ffffff", border: "1px solid #cbd5e1", padding: "0.2rem 0.5rem", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", textDecoration: "line-through" }}>S Tachado</button>
+                  <button type="button" onClick={() => insertFormatting("code")} style={{ background: "#ffffff", border: "1px solid #cbd5e1", padding: "0.2rem 0.5rem", borderRadius: "4px", fontSize: "0.72rem", cursor: "pointer", fontFamily: "monospace" }}>&lt;/&gt; Código</button>
+                </div>
+              )}
+
+              {/* Input Form & Action Bar */}
+              <div style={{ padding: "0.75rem 1rem", background: "#f8fafc", borderTop: "1px solid #e2e8f0" }}>
                 {isRecording ? (
                   <div style={{
                     display: "flex",
@@ -974,18 +1212,175 @@ export default function WhatsAppAutomationDashboard({
                     </div>
                   </div>
                 ) : (
-                  <form onSubmit={handleSendMessage} style={{ display: "flex", gap: "0.5rem" }}>
+                  <form onSubmit={handleSendMessage} style={{ display: "flex", alignItems: "center", gap: "0.4rem", position: "relative" }}>
+                    
+                    {/* Emoji Button */}
+                    <button
+                      type="button"
+                      onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowAttachMenu(false); setShowFormattingMenu(false); }}
+                      title="Emojis"
+                      style={{
+                        background: showEmojiPicker ? "#e2e8f0" : "transparent",
+                        border: "none",
+                        color: "#64748b",
+                        borderRadius: "50%",
+                        width: "36px",
+                        height: "36px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <Smile size={20} />
+                    </button>
+
+                    {/* Attachment Clip Button */}
+                    <div style={{ position: "relative" }}>
+                      <button
+                        type="button"
+                        onClick={() => { setShowAttachMenu(!showAttachMenu); setShowEmojiPicker(false); setShowFormattingMenu(false); }}
+                        title="Anexar Fotos ou Documentos"
+                        style={{
+                          background: showAttachMenu ? "#e2e8f0" : "transparent",
+                          border: "none",
+                          color: "#64748b",
+                          borderRadius: "50%",
+                          width: "36px",
+                          height: "36px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer"
+                        }}
+                      >
+                        <Paperclip size={20} />
+                      </button>
+
+                      {/* Attachment Dropdown Menu */}
+                      {showAttachMenu && (
+                        <div style={{
+                          position: "absolute",
+                          bottom: "45px",
+                          left: "0",
+                          background: "#ffffff",
+                          borderRadius: "12px",
+                          boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+                          border: "1px solid #e2e8f0",
+                          padding: "0.5rem",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.3rem",
+                          width: "200px",
+                          zIndex: 50
+                        }}>
+                          <button
+                            type="button"
+                            onClick={() => fileInputImageRef.current?.click()}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.6rem",
+                              padding: "0.5rem 0.75rem",
+                              background: "transparent",
+                              border: "none",
+                              borderRadius: "8px",
+                              fontSize: "0.8rem",
+                              color: "#1e293b",
+                              cursor: "pointer",
+                              textAlign: "left"
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = "#f1f5f9"}
+                            onMouseLeave={(e) => e.target.style.background = "transparent"}
+                          >
+                            <ImageIcon size={18} color="#9333ea" />
+                            <span>Fotos e Imagens</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => fileInputDocRef.current?.click()}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.6rem",
+                              padding: "0.5rem 0.75rem",
+                              background: "transparent",
+                              border: "none",
+                              borderRadius: "8px",
+                              fontSize: "0.8rem",
+                              color: "#1e293b",
+                              cursor: "pointer",
+                              textAlign: "left"
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = "#f1f5f9"}
+                            onMouseLeave={(e) => e.target.style.background = "transparent"}
+                          >
+                            <FileText size={18} color="#0284c7" />
+                            <span>Documentos & PDFs</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => fileInputVideoRef.current?.click()}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.6rem",
+                              padding: "0.5rem 0.75rem",
+                              background: "transparent",
+                              border: "none",
+                              borderRadius: "8px",
+                              fontSize: "0.8rem",
+                              color: "#1e293b",
+                              cursor: "pointer",
+                              textAlign: "left"
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = "#f1f5f9"}
+                            onMouseLeave={(e) => e.target.style.background = "transparent"}
+                          >
+                            <Video size={18} color="#ea580c" />
+                            <span>Vídeos</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Formatting Button */}
+                    <button
+                      type="button"
+                      onClick={() => { setShowFormattingMenu(!showFormattingMenu); setShowAttachMenu(false); setShowEmojiPicker(false); }}
+                      title="Formatação de Texto (*negrito*, _itálico_)"
+                      style={{
+                        background: showFormattingMenu ? "#e2e8f0" : "transparent",
+                        border: "none",
+                        color: "#64748b",
+                        borderRadius: "50%",
+                        width: "36px",
+                        height: "36px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        fontWeight: "900",
+                        fontSize: "0.85rem"
+                      }}
+                    >
+                      Tt
+                    </button>
+
+                    {/* Text Input */}
                     <input
                       type="text"
                       className="glass-input"
-                      style={{ flex: 1, fontSize: "0.84rem" }}
-                      placeholder={cleanActivePhone ? "Digite uma mensagem para o WhatsApp..." : "Selecione um contato na lista ao lado..."}
+                      style={{ flex: 1, fontSize: "0.84rem", background: "#ffffff", padding: "0.6rem 0.85rem" }}
+                      placeholder={cleanActivePhone ? "Digite a mensagem para enviar no WhatsApp..." : "Selecione um contato na lista ao lado..."}
                       disabled={!cleanActivePhone}
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                     />
 
-                    {/* Microphone button */}
+                    {/* Voice Recording / Microphone Button */}
                     <button
                       type="button"
                       onClick={handleStartRecording}
@@ -993,25 +1388,38 @@ export default function WhatsAppAutomationDashboard({
                       title="Gravar Áudio de Voz (PTT)"
                       style={{
                         background: "#f0fdf4",
-                        border: "1px solid #bbf7d0",
+                        border: "1.5px solid #86efac",
                         color: "#16a34a",
-                        borderRadius: "8px",
-                        padding: "0 0.85rem",
+                        borderRadius: "50%",
+                        width: "40px",
+                        height: "40px",
                         cursor: cleanActivePhone ? "pointer" : "not-allowed",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        transition: "all 0.15s ease"
+                        flexShrink: 0,
+                        transition: "all 0.15s ease",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
                       }}
                     >
-                      <Mic size={18} />
+                      <Mic size={20} />
                     </button>
 
+                    {/* Send Button */}
                     <button
                       type="submit"
                       disabled={!cleanActivePhone || !chatInput.trim()}
                       className="btn-primary"
-                      style={{ background: "#16a34a", border: "none", display: "flex", alignItems: "center", gap: "0.35rem", padding: "0.55rem 1rem" }}
+                      style={{
+                        background: "#16a34a",
+                        border: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.35rem",
+                        padding: "0.55rem 1rem",
+                        borderRadius: "8px",
+                        flexShrink: 0
+                      }}
                     >
                       <Send size={15} />
                       <span>Enviar</span>

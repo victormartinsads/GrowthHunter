@@ -24,7 +24,7 @@ let sessionState = {
 
 // Armazenamento de conversas e mensagens
 let chatsStore = new Map(); // key: phone or JID, value: { jid, phone, name, avatar, lastMessage, timestamp, unreadCount }
-let messagesStore = []; // array de { id, jid, phone, contactName, direction, type, content, audioBase64, timestamp, status }
+let messagesStore = []; // array de { id, jid, phone, contactName, direction, type, content, mediaUrl, fileName, timestamp, status }
 
 let automationRules = {
   welcomeEnabled: false,
@@ -153,15 +153,29 @@ export async function initWhatsAppBaileys() {
         if (!cleanPhone && !senderJid) continue;
 
         const isAudio = Boolean(msg.message?.audioMessage);
-        const textContent = msg.message?.conversation || 
-                            msg.message?.extendedTextMessage?.text || 
-                            msg.message?.imageMessage?.caption || 
-                            (msg.message?.imageMessage ? "📷 Imagem" : "") ||
-                            (isAudio ? "🎙️ Mensagem de Áudio" : "") ||
-                            (msg.message?.documentMessage ? "📄 Documento" : "") ||
-                            "";
+        const isImage = Boolean(msg.message?.imageMessage);
+        const isDocument = Boolean(msg.message?.documentMessage);
+        const isVideo = Boolean(msg.message?.videoMessage);
 
-        if (!textContent && !isAudio) continue;
+        let type = "TEXT";
+        let textContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+
+        if (isAudio) {
+          type = "AUDIO";
+          textContent = "🎙️ Mensagem de Áudio";
+        } else if (isImage) {
+          type = "IMAGE";
+          textContent = msg.message.imageMessage.caption ? `📷 ${msg.message.imageMessage.caption}` : "📷 Foto";
+        } else if (isDocument) {
+          type = "DOCUMENT";
+          const docName = msg.message.documentMessage.fileName || "Documento";
+          textContent = `📄 ${docName}`;
+        } else if (isVideo) {
+          type = "VIDEO";
+          textContent = "🎥 Vídeo";
+        }
+
+        if (!textContent) continue;
 
         const isFromMe = Boolean(msg.key.fromMe);
         const contactName = msg.pushName || (cleanPhone ? `+${cleanPhone}` : "Contato");
@@ -174,7 +188,7 @@ export async function initWhatsAppBaileys() {
           phone: cleanPhone || senderJid,
           contactName: contactName,
           direction: isFromMe ? "OUTBOUND" : "INBOUND",
-          type: isAudio ? "AUDIO" : "TEXT",
+          type: type,
           content: textContent,
           timestamp: msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString(),
           status: isFromMe ? "SENT" : "DELIVERED"
@@ -220,10 +234,8 @@ export async function initWhatsAppBaileys() {
   }
 }
 
-// Envio de mensagem de texto real via Baileys
-export async function sendWhatsAppRealMessage(targetInput, messageText) {
-  if (!targetInput || !messageText) return { success: false, error: "Destinatário ou mensagem vazia." };
-
+// Auxiliar para obter JID de destino
+async function resolveTargetJid(targetInput) {
   const rawStr = String(targetInput).trim();
   let cleanDigits = rawStr.replace(/\D/g, "");
   let targetJid = "";
@@ -240,19 +252,28 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
     targetJid = `${cleanDigits}@s.whatsapp.net`;
   }
 
+  if (sock && sessionState.status === "CONNECTED" && targetJid.endsWith("@s.whatsapp.net") && cleanDigits) {
+    try {
+      const onWaResult = await sock.onWhatsApp(cleanDigits);
+      if (onWaResult && onWaResult.length > 0 && onWaResult[0]?.exists && onWaResult[0]?.jid) {
+        targetJid = onWaResult[0].jid;
+      }
+    } catch (e) {}
+  }
+
+  return { targetJid, cleanDigits };
+}
+
+// Envio de mensagem de texto real via Baileys
+export async function sendWhatsAppRealMessage(targetInput, messageText) {
+  if (!targetInput || !messageText) return { success: false, error: "Destinatário ou mensagem vazia." };
+
   try {
     if (!sock || sessionState.status !== "CONNECTED") {
       return { success: false, error: "WhatsApp não está conectado. Escaneie o QR Code primeiro." };
     }
 
-    if (targetJid.endsWith("@s.whatsapp.net") && cleanDigits) {
-      try {
-        const onWaResult = await sock.onWhatsApp(cleanDigits);
-        if (onWaResult && onWaResult.length > 0 && onWaResult[0]?.exists && onWaResult[0]?.jid) {
-          targetJid = onWaResult[0].jid;
-        }
-      } catch (e) {}
-    }
+    const { targetJid, cleanDigits } = await resolveTargetJid(targetInput);
 
     console.log(`🚀 [Baileys] Enviando mensagem REAL para ${targetJid}: "${messageText}"`);
     const sentMsg = await sock.sendMessage(targetJid, { text: messageText });
@@ -287,7 +308,7 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
 
     return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
   } catch (err) {
-    console.error(`❌ Erro ao enviar mensagem Baileys para ${targetJid}:`, err);
+    console.error(`❌ Erro ao enviar mensagem Baileys para ${targetInput}:`, err);
     return { success: false, error: err.message };
   }
 }
@@ -296,36 +317,12 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
 export async function sendWhatsAppAudioMessage(targetInput, audioBase64) {
   if (!targetInput || !audioBase64) return { success: false, error: "Destinatário ou áudio vazio." };
 
-  const rawStr = String(targetInput).trim();
-  let cleanDigits = rawStr.replace(/\D/g, "");
-  let targetJid = "";
-
-  const knownChat = chatsStore.get(cleanDigits) || chatsStore.get(rawStr);
-  if (knownChat && knownChat.jid) {
-    targetJid = knownChat.jid;
-  } else if (rawStr.includes("@")) {
-    targetJid = rawStr;
-  } else {
-    if (!cleanDigits.startsWith("55") && !cleanDigits.startsWith("351") && (cleanDigits.length === 10 || cleanDigits.length === 11)) {
-      cleanDigits = "55" + cleanDigits;
-    }
-    targetJid = `${cleanDigits}@s.whatsapp.net`;
-  }
-
   try {
     if (!sock || sessionState.status !== "CONNECTED") {
       return { success: false, error: "WhatsApp não está conectado." };
     }
 
-    if (targetJid.endsWith("@s.whatsapp.net") && cleanDigits) {
-      try {
-        const onWaResult = await sock.onWhatsApp(cleanDigits);
-        if (onWaResult && onWaResult.length > 0 && onWaResult[0]?.exists && onWaResult[0]?.jid) {
-          targetJid = onWaResult[0].jid;
-        }
-      } catch (e) {}
-    }
-
+    const { targetJid, cleanDigits } = await resolveTargetJid(targetInput);
     const cleanBase64 = audioBase64.replace(/^data:audio\/\w+;base64,/, "");
     const audioBuffer = Buffer.from(cleanBase64, "base64");
 
@@ -334,7 +331,7 @@ export async function sendWhatsAppAudioMessage(targetInput, audioBase64) {
     const sentMsg = await sock.sendMessage(targetJid, {
       audio: audioBuffer,
       mimetype: "audio/mp4",
-      ptt: true // Push-to-talk (áudio nativo verde no WhatsApp)
+      ptt: true
     });
 
     const newMsg = {
@@ -345,7 +342,7 @@ export async function sendWhatsAppAudioMessage(targetInput, audioBase64) {
       direction: "OUTBOUND",
       type: "AUDIO",
       content: "🎙️ Mensagem de Áudio",
-      audioBase64: `data:audio/mp4;base64,${cleanBase64}`,
+      mediaUrl: `data:audio/mp4;base64,${cleanBase64}`,
       timestamp: new Date().toISOString(),
       status: "SENT"
     };
@@ -366,7 +363,77 @@ export async function sendWhatsAppAudioMessage(targetInput, audioBase64) {
 
     return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
   } catch (err) {
-    console.error(`❌ Erro ao enviar áudio Baileys para ${targetJid}:`, err);
+    console.error(`❌ Erro ao enviar áudio Baileys para ${targetInput}:`, err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Envio de MÍDIA (Foto, Documento/PDF, Vídeo) via Baileys
+export async function sendWhatsAppMediaMessage(targetInput, { mediaBase64, mediaType = "image", mimeType = "image/jpeg", fileName = "", caption = "" }) {
+  if (!targetInput || !mediaBase64) return { success: false, error: "Destinatário ou mídia vazia." };
+
+  try {
+    if (!sock || sessionState.status !== "CONNECTED") {
+      return { success: false, error: "WhatsApp não está conectado." };
+    }
+
+    const { targetJid, cleanDigits } = await resolveTargetJid(targetInput);
+    const cleanBase64 = mediaBase64.replace(/^data:[^;]+;base64,/, "");
+    const mediaBuffer = Buffer.from(cleanBase64, "base64");
+
+    let messagePayload = {};
+    let displayContent = "";
+
+    if (mediaType === "image") {
+      messagePayload = { image: mediaBuffer, caption: caption || undefined };
+      displayContent = caption ? `📷 ${caption}` : "📷 Foto";
+    } else if (mediaType === "document") {
+      messagePayload = { 
+        document: mediaBuffer, 
+        mimetype: mimeType || "application/pdf", 
+        fileName: fileName || "documento.pdf",
+        caption: caption || undefined
+      };
+      displayContent = `📄 ${fileName || "Documento"}`;
+    } else if (mediaType === "video") {
+      messagePayload = { video: mediaBuffer, caption: caption || undefined };
+      displayContent = caption ? `🎥 ${caption}` : "🎥 Vídeo";
+    }
+
+    console.log(`📎 [Baileys] Enviando Mídia REAL (${mediaType}) para ${targetJid}`);
+    const sentMsg = await sock.sendMessage(targetJid, messagePayload);
+
+    const newMsg = {
+      id: sentMsg?.key?.id || `out_media_${Date.now()}`,
+      jid: targetJid,
+      phone: cleanDigits || targetJid,
+      contactName: "Lead",
+      direction: "OUTBOUND",
+      type: mediaType.toUpperCase(),
+      content: displayContent,
+      mediaUrl: `data:${mimeType};base64,${cleanBase64}`,
+      fileName: fileName,
+      timestamp: new Date().toISOString(),
+      status: "SENT"
+    };
+
+    messagesStore.push(newMsg);
+
+    const chatKey = cleanDigits || targetJid;
+    const existing = chatsStore.get(chatKey) || {};
+    chatsStore.set(chatKey, {
+      jid: targetJid,
+      phone: chatKey,
+      name: existing.name || `+${chatKey}`,
+      avatar: existing.avatar || null,
+      lastMessage: displayContent,
+      timestamp: newMsg.timestamp,
+      unreadCount: 0
+    });
+
+    return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
+  } catch (err) {
+    console.error(`❌ Erro ao enviar mídia Baileys para ${targetInput}:`, err);
     return { success: false, error: err.message };
   }
 }
