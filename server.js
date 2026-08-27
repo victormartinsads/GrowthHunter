@@ -6,6 +6,7 @@ import {
   getWhatsAppSession, 
   getRealChats,
   sendWhatsAppRealMessage, 
+  sendWhatsAppAudioMessage,
   getStoredMessages, 
   getAutomationRules, 
   updateAutomationRules, 
@@ -1020,6 +1021,18 @@ app.post("/api/whatsapp/send-message", async (req, res) => {
   }
 
   const result = await sendWhatsAppRealMessage(phone, message);
+  return res.json(result);
+});
+
+// 4.05 Enviar Mensagem de ÁUDIO PTT Real
+app.post("/api/whatsapp/send-audio", async (req, res) => {
+  const { phone, audioBase64 } = req.body;
+
+  if (!phone || !audioBase64) {
+    return res.status(400).json({ error: "Telefone e áudio em base64 são obrigatórios." });
+  }
+
+  const result = await sendWhatsAppAudioMessage(phone, audioBase64);
   return res.json(result);
 });
 

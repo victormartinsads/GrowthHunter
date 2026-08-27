@@ -3,7 +3,8 @@ import {
   MessageCircle, QrCode, Send, Sparkles, Clock, ShieldCheck, 
   Settings, CheckCircle2, XCircle, RefreshCw, Smartphone, Bot, 
   Layers, Users, Share2, ArrowRight, Zap, Filter, Search, Plus, 
-  Trash2, Copy, Check, ExternalLink, Calendar, AlertTriangle
+  Trash2, Copy, Check, ExternalLink, Calendar, AlertTriangle,
+  Mic, Square, Volume2, Play, Pause, Image as ImageIcon
 } from "lucide-react";
 import { buildWhatsappUrl, buildGoogleMapsUrl } from "../utils/helpers";
 import { normalizeSegment } from "../utils/segmentClassifier";
@@ -184,6 +185,106 @@ export default function WhatsAppAutomationDashboard({
       console.error("Erro ao enviar mensagem:", err);
       showToast?.("Erro de conexão ao enviar mensagem.", "error");
     }
+  };
+
+  // ── Gravação e Envio de Áudio PTT (Voz Real) ──
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = React.useRef(null);
+  const audioChunksRef = React.useRef([]);
+  const timerRef = React.useRef(null);
+
+  const handleStartRecording = async () => {
+    if (!activeChatPhone) {
+      showToast?.("Selecione um contato para enviar o áudio.", "warning");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      timerRef.current = setInterval(() => {
+        setRecordingSeconds(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Erro ao acessar microfone:", err);
+      showToast?.("Permissão do microfone negada ou indisponível.", "error");
+    }
+  };
+
+  const handleCancelRecording = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (mediaRecorderRef.current) {
+      try {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+      } catch (e) {}
+    }
+    audioChunksRef.current = [];
+    setIsRecording(false);
+    setRecordingSeconds(0);
+  };
+
+  const handleStopAndSendAudio = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (!mediaRecorderRef.current || !activeChatPhone) {
+      handleCancelRecording();
+      return;
+    }
+
+    const cleanPhone = String(activeChatPhone).replace(/\D/g, "");
+
+    mediaRecorderRef.current.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/mp4" });
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = async () => {
+        const base64Audio = reader.result;
+        try {
+          const res = await fetch("http://localhost:3001/api/whatsapp/send-audio", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: cleanPhone, audioBase64: base64Audio })
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            showToast?.("🎙️ Áudio enviado com sucesso!", "success");
+            const msgRes = await fetch("http://localhost:3001/api/whatsapp/messages");
+            if (msgRes.ok) {
+              const msgData = await msgRes.json();
+              if (msgData.messages) {
+                setMessages(msgData.messages);
+              }
+            }
+          } else {
+            showToast?.(data.error || "Falha ao enviar áudio.", "error");
+          }
+        } catch (err) {
+          console.error("Erro ao enviar áudio:", err);
+          showToast?.("Erro ao enviar áudio.", "error");
+        }
+      };
+
+      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+      setIsRecording(false);
+      setRecordingSeconds(0);
+    };
+
+    mediaRecorderRef.current.stop();
   };
 
   const handleAddKeywordRule = (e) => {
@@ -584,20 +685,50 @@ export default function WhatsAppAutomationDashboard({
                             background: isSelected ? "#f0fdf4" : "#fafaf9",
                             border: isSelected ? "1.5px solid #16a34a" : "1px solid #e8e6e0",
                             cursor: "pointer",
-                            transition: "all 0.15s ease"
+                            transition: "all 0.15s ease",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.65rem"
                           }}
                         >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <strong style={{ fontSize: "0.82rem", color: "#1c1917", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px" }}>
-                              {chat.name || `+${chat.phone}`}
-                            </strong>
-                            <span style={{ fontSize: "0.66rem", color: "#94a3b8" }}>
-                              {chat.timestamp ? new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
-                            </span>
+                          {/* Avatar */}
+                          {chat.avatar ? (
+                            <img
+                              src={chat.avatar}
+                              alt={chat.name}
+                              style={{ width: "36px", height: "36px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: "36px",
+                              height: "36px",
+                              borderRadius: "50%",
+                              background: "#dcfce7",
+                              color: "#15803d",
+                              fontWeight: "800",
+                              fontSize: "0.88rem",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0
+                            }}>
+                              {(chat.name || "W")[0].toUpperCase()}
+                            </div>
+                          )}
+
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <strong style={{ fontSize: "0.82rem", color: "#1c1917", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {chat.name || `+${chat.phone}`}
+                              </strong>
+                              <span style={{ fontSize: "0.66rem", color: "#94a3b8" }}>
+                                {chat.timestamp ? new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                              </span>
+                            </div>
+                            <p style={{ margin: "0.2rem 0 0 0", fontSize: "0.74rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {chat.lastMessage || `+${chat.phone}`}
+                            </p>
                           </div>
-                          <p style={{ margin: "0.2rem 0 0 0", fontSize: "0.74rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {chat.lastMessage || `+${chat.phone}`}
-                          </p>
                         </div>
                       );
                     })
@@ -617,20 +748,41 @@ export default function WhatsAppAutomationDashboard({
                           background: isSelected ? "#f0fdf4" : "#fafaf9",
                           border: isSelected ? "1.5px solid #16a34a" : "1px solid #e8e6e0",
                           cursor: "pointer",
-                          transition: "all 0.15s ease"
+                          transition: "all 0.15s ease",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.65rem"
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <strong style={{ fontSize: "0.82rem", color: "#1c1917", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "190px" }}>
-                            {c.name}
-                          </strong>
-                          <span style={{ fontSize: "0.66rem", color: "#16a34a", fontWeight: "700" }}>
-                            {c.scores?.finalScore ? `${c.scores.finalScore} pts` : ""}
+                        <div style={{
+                          width: "36px",
+                          height: "36px",
+                          borderRadius: "50%",
+                          background: "#e0f2fe",
+                          color: "#0369a1",
+                          fontWeight: "800",
+                          fontSize: "0.88rem",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0
+                        }}>
+                          {(c.name || "C")[0].toUpperCase()}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <strong style={{ fontSize: "0.82rem", color: "#1c1917", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {c.name}
+                            </strong>
+                            <span style={{ fontSize: "0.66rem", color: "#16a34a", fontWeight: "700" }}>
+                              {c.scores?.finalScore ? `${c.scores.finalScore} pts` : ""}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: "0.72rem", color: "#64748b", display: "block", marginTop: "2px" }}>
+                            {normalizeSegment(c.niche || c.category)} • {c.city || "Brasil"}
                           </span>
                         </div>
-                        <span style={{ fontSize: "0.72rem", color: "#64748b", display: "block", marginTop: "2px" }}>
-                          {normalizeSegment(c.niche || c.category)} • {c.city || "Brasil"}
-                        </span>
                       </div>
                     );
                   })
@@ -652,20 +804,29 @@ export default function WhatsAppAutomationDashboard({
                 justifyContent: "space-between"
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <div style={{
-                    width: "38px",
-                    height: "38px",
-                    borderRadius: "50%",
-                    background: "#dcfce7",
-                    color: "#15803d",
-                    fontWeight: "900",
-                    fontSize: "0.95rem",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center"
-                  }}>
-                    {(activeChatInfo.name || "W")[0].toUpperCase()}
-                  </div>
+                  {activeChatInfo.avatar ? (
+                    <img
+                      src={activeChatInfo.avatar}
+                      alt={activeChatInfo.name}
+                      style={{ width: "42px", height: "42px", borderRadius: "50%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: "42px",
+                      height: "42px",
+                      borderRadius: "50%",
+                      background: "#dcfce7",
+                      color: "#15803d",
+                      fontWeight: "900",
+                      fontSize: "1rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}>
+                      {(activeChatInfo.name || "W")[0].toUpperCase()}
+                    </div>
+                  )}
+
                   <div>
                     <strong style={{ fontSize: "0.92rem", color: "#0f172a", display: "block" }}>
                       {activeChatInfo.name || "Selecione uma conversa"}
@@ -701,12 +862,14 @@ export default function WhatsAppAutomationDashboard({
                       Nenhuma mensagem trocada ainda com este contato
                     </strong>
                     <p style={{ fontSize: "0.78rem", color: "#64748b", margin: "0.4rem 0 0 0", lineHeight: "1.4" }}>
-                      Digite sua mensagem no campo abaixo para iniciar o atendimento pelo WhatsApp em tempo real.
+                      Digite sua mensagem ou grave um áudio no campo abaixo para conversar pelo WhatsApp em tempo real.
                     </p>
                   </div>
                 ) : (
                   currentChatMessages.map(msg => {
                     const isOutbound = msg.direction === "OUTBOUND";
+                    const isAudio = msg.type === "AUDIO" || Boolean(msg.audioBase64) || (msg.content && msg.content.includes("Áudio"));
+
                     return (
                       <div
                         key={msg.id}
@@ -720,9 +883,28 @@ export default function WhatsAppAutomationDashboard({
                           border: isOutbound ? "none" : "1px solid #e2e8f0"
                         }}
                       >
-                        <p style={{ margin: 0, fontSize: "0.84rem", color: "#0f172a", lineHeight: "1.4", whiteSpace: "pre-wrap" }}>
-                          {msg.content}
-                        </p>
+                        {isAudio ? (
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginBottom: "0.35rem", fontSize: "0.78rem", fontWeight: "700", color: "#15803d" }}>
+                              <Mic size={14} color="#16a34a" />
+                              <span>Mensagem de Áudio (Voz)</span>
+                            </div>
+                            {msg.audioBase64 ? (
+                              <audio
+                                src={msg.audioBase64}
+                                controls
+                                style={{ height: "36px", width: "240px", borderRadius: "20px" }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: "0.75rem", color: "#64748b" }}>🎵 Áudio recebido no WhatsApp</span>
+                            )}
+                          </div>
+                        ) : (
+                          <p style={{ margin: 0, fontSize: "0.84rem", color: "#0f172a", lineHeight: "1.4", whiteSpace: "pre-wrap" }}>
+                            {msg.content}
+                          </p>
+                        )}
+
                         <span style={{ fontSize: "0.66rem", color: "#64748b", display: "block", textAlign: "right", marginTop: "4px" }}>
                           {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""} • {isOutbound ? (msg.status || "Enviado") : "Recebido"}
                         </span>
@@ -732,27 +914,111 @@ export default function WhatsAppAutomationDashboard({
                 )}
               </div>
 
-              {/* Input Form */}
-              <form onSubmit={handleSendMessage} style={{ padding: "0.85rem 1.25rem", background: "#ffffff", borderTop: "1px solid #e2e8f0", display: "flex", gap: "0.5rem" }}>
-                <input
-                  type="text"
-                  className="glass-input"
-                  style={{ flex: 1, fontSize: "0.84rem" }}
-                  placeholder={cleanActivePhone ? "Digite a mensagem para enviar no WhatsApp..." : "Selecione um contato na lista ao lado..."}
-                  disabled={!cleanActivePhone}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                />
-                <button
-                  type="submit"
-                  disabled={!cleanActivePhone || !chatInput.trim()}
-                  className="btn-primary"
-                  style={{ background: "#16a34a", border: "none", display: "flex", alignItems: "center", gap: "0.35rem", padding: "0.55rem 1rem" }}
-                >
-                  <Send size={15} />
-                  <span>Enviar</span>
-                </button>
-              </form>
+              {/* Input Form & Voice Recording Bar */}
+              <div style={{ padding: "0.85rem 1.25rem", background: "#ffffff", borderTop: "1px solid #e2e8f0" }}>
+                {isRecording ? (
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "#fef2f2",
+                    padding: "0.6rem 1rem",
+                    borderRadius: "10px",
+                    border: "1px solid #fecaca"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                      <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#dc2626", animation: "pulse 1s infinite" }} />
+                      <strong style={{ fontSize: "0.84rem", color: "#991b1b" }}>
+                        Gravando Áudio: {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
+                      </strong>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <button
+                        type="button"
+                        onClick={handleCancelRecording}
+                        style={{
+                          background: "#ffffff",
+                          border: "1px solid #fca5a5",
+                          color: "#dc2626",
+                          borderRadius: "6px",
+                          padding: "0.4rem 0.75rem",
+                          fontSize: "0.76rem",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.3rem"
+                        }}
+                      >
+                        <Trash2 size={14} />
+                        <span>Cancelar</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleStopAndSendAudio}
+                        className="btn-primary"
+                        style={{
+                          background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
+                          border: "none",
+                          padding: "0.4rem 0.9rem",
+                          fontSize: "0.76rem",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.35rem"
+                        }}
+                      >
+                        <Send size={14} />
+                        <span>Enviar Áudio</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSendMessage} style={{ display: "flex", gap: "0.5rem" }}>
+                    <input
+                      type="text"
+                      className="glass-input"
+                      style={{ flex: 1, fontSize: "0.84rem" }}
+                      placeholder={cleanActivePhone ? "Digite uma mensagem para o WhatsApp..." : "Selecione um contato na lista ao lado..."}
+                      disabled={!cleanActivePhone}
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                    />
+
+                    {/* Microphone button */}
+                    <button
+                      type="button"
+                      onClick={handleStartRecording}
+                      disabled={!cleanActivePhone}
+                      title="Gravar Áudio de Voz (PTT)"
+                      style={{
+                        background: "#f0fdf4",
+                        border: "1px solid #bbf7d0",
+                        color: "#16a34a",
+                        borderRadius: "8px",
+                        padding: "0 0.85rem",
+                        cursor: cleanActivePhone ? "pointer" : "not-allowed",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <Mic size={18} />
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={!cleanActivePhone || !chatInput.trim()}
+                      className="btn-primary"
+                      style={{ background: "#16a34a", border: "none", display: "flex", alignItems: "center", gap: "0.35rem", padding: "0.55rem 1rem" }}
+                    >
+                      <Send size={15} />
+                      <span>Enviar</span>
+                    </button>
+                  </form>
+                )}
+              </div>
 
             </div>
 

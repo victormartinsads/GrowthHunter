@@ -17,15 +17,15 @@ let sessionState = {
   status: "DISCONNECTED", // "DISCONNECTED" | "SCAN_QR" | "CONNECTING" | "CONNECTED"
   phone: "",
   profileName: "",
+  avatar: null,
   connectedAt: null,
   battery: 100
 };
 
 // Armazenamento de conversas e mensagens
-let chatsStore = new Map(); // key: phone or JID, value: { jid, phone, name, lastMessage, timestamp, unreadCount }
-let messagesStore = []; // array de { id, jid, phone, contactName, direction, content, timestamp, status }
+let chatsStore = new Map(); // key: phone or JID, value: { jid, phone, name, avatar, lastMessage, timestamp, unreadCount }
+let messagesStore = []; // array de { id, jid, phone, contactName, direction, type, content, audioBase64, timestamp, status }
 
-// Auto-respostas DESATIVADAS por padrão conforme solicitado
 let automationRules = {
   welcomeEnabled: false,
   welcomeMessage: "Olá! Obrigado pelo contato com a nossa equipe. Como podemos te ajudar hoje?",
@@ -33,27 +33,18 @@ let automationRules = {
   officeHoursStart: "08:00",
   officeHoursEnd: "18:00",
   officeHoursMessage: "Olá! Nosso horário de atendimento é de Segunda a Sexta das 08h às 18h. Responderemos assim que possível!",
-  keywordRules: [
-    {
-      id: "rule_preco",
-      keyword: "preço, valor, quanto custa, orçamento",
-      replyText: "Trabalhamos com projetos sob medida para o seu nicho! Para te passar a proposta exata, qual é o segmento da sua empresa e a cidade?",
-      enabled: false
-    },
-    {
-      id: "rule_reuniao",
-      keyword: "reunião, agendar, horário, marcar",
-      replyText: "Excelente! Tenho horários disponíveis amanhã às 14h ou 16h para uma apresentação rápida de 15 minutos. Qual fica melhor para você?",
-      enabled: false
-    },
-    {
-      id: "rule_site",
-      keyword: "site, landing page, reformulação",
-      replyText: "Desenvolvemos páginas ultra-rápidas otimizadas para celular com botão direto de WhatsApp e Meta Pixel configurado. Quer que eu te envie 2 exemplos reais?",
-      enabled: false
-    }
-  ]
+  keywordRules: []
 };
+
+// Função auxiliar para buscar foto de perfil oficial no WhatsApp
+export async function fetchProfilePicture(jid) {
+  try {
+    if (sock && sessionState.status === "CONNECTED" && jid) {
+      return await sock.profilePictureUrl(jid, "image");
+    }
+  } catch (e) {}
+  return null;
+}
 
 export async function initWhatsAppBaileys() {
   if (isInitializing) {
@@ -110,10 +101,16 @@ export async function initWhatsAppBaileys() {
         const userJid = sock.user?.id || "";
         const cleanPhone = userJid.split(":")[0].split("@")[0];
         
+        let myAvatar = null;
+        try {
+          myAvatar = await sock.profilePictureUrl(userJid, "image");
+        } catch (e) {}
+
         sessionState = {
           status: "CONNECTED",
           phone: cleanPhone,
           profileName: sock.user?.name || "WhatsApp Business",
+          avatar: myAvatar,
           connectedAt: new Date().toISOString(),
           battery: 98
         };
@@ -135,6 +132,7 @@ export async function initWhatsAppBaileys() {
           sessionState.status = "DISCONNECTED";
           sessionState.phone = "";
           sessionState.profileName = "";
+          sessionState.avatar = null;
           currentQrCodeDataUrl = null;
           try {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
@@ -144,7 +142,7 @@ export async function initWhatsAppBaileys() {
     });
 
     // Escuta mensagens recebidas e enviadas reais
-    sock.ev.on("messages.upsert", async ({ messages: newMessages, type }) => {
+    sock.ev.on("messages.upsert", async ({ messages: newMessages }) => {
       for (const msg of newMessages) {
         if (!msg.message) continue;
 
@@ -154,15 +152,16 @@ export async function initWhatsAppBaileys() {
         const cleanPhone = senderJid.replace("@s.whatsapp.net", "").replace("@lid", "").replace(/\D/g, "");
         if (!cleanPhone && !senderJid) continue;
 
+        const isAudio = Boolean(msg.message?.audioMessage);
         const textContent = msg.message?.conversation || 
                             msg.message?.extendedTextMessage?.text || 
                             msg.message?.imageMessage?.caption || 
                             (msg.message?.imageMessage ? "📷 Imagem" : "") ||
-                            (msg.message?.audioMessage ? "🎵 Áudio" : "") ||
+                            (isAudio ? "🎙️ Mensagem de Áudio" : "") ||
                             (msg.message?.documentMessage ? "📄 Documento" : "") ||
                             "";
 
-        if (!textContent) continue;
+        if (!textContent && !isAudio) continue;
 
         const isFromMe = Boolean(msg.key.fromMe);
         const contactName = msg.pushName || (cleanPhone ? `+${cleanPhone}` : "Contato");
@@ -175,6 +174,7 @@ export async function initWhatsAppBaileys() {
           phone: cleanPhone || senderJid,
           contactName: contactName,
           direction: isFromMe ? "OUTBOUND" : "INBOUND",
+          type: isAudio ? "AUDIO" : "TEXT",
           content: textContent,
           timestamp: msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString(),
           status: isFromMe ? "SENT" : "DELIVERED"
@@ -184,17 +184,31 @@ export async function initWhatsAppBaileys() {
           messagesStore.push(storedMsg);
         }
 
-        // Mapeia tanto pelo telefone quanto pelo JID para envio infalível
         const chatKey = cleanPhone || senderJid;
         const existingChat = chatsStore.get(chatKey) || {};
+
         chatsStore.set(chatKey, {
           jid: senderJid,
           phone: chatKey,
           name: existingChat.name && !existingChat.name.startsWith("+") ? existingChat.name : contactName,
+          avatar: existingChat.avatar || null,
           lastMessage: textContent,
           timestamp: storedMsg.timestamp,
           unreadCount: isFromMe ? 0 : (existingChat.unreadCount || 0) + 1
         });
+
+        // Tenta buscar a foto de perfil assincronamente se ainda não tiver
+        if (!existingChat.avatar) {
+          fetchProfilePicture(senderJid).then(avatarUrl => {
+            if (avatarUrl) {
+              const c = chatsStore.get(chatKey);
+              if (c) {
+                c.avatar = avatarUrl;
+                chatsStore.set(chatKey, c);
+              }
+            }
+          }).catch(() => {});
+        }
       }
     });
 
@@ -206,7 +220,7 @@ export async function initWhatsAppBaileys() {
   }
 }
 
-// Envio de mensagem real via Baileys
+// Envio de mensagem de texto real via Baileys
 export async function sendWhatsAppRealMessage(targetInput, messageText) {
   if (!targetInput || !messageText) return { success: false, error: "Destinatário ou mensagem vazia." };
 
@@ -214,14 +228,12 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
   let cleanDigits = rawStr.replace(/\D/g, "");
   let targetJid = "";
 
-  // 1. Verifica se já temos o JID salvo no chatsStore
   const knownChat = chatsStore.get(cleanDigits) || chatsStore.get(rawStr);
   if (knownChat && knownChat.jid) {
     targetJid = knownChat.jid;
   } else if (rawStr.includes("@")) {
     targetJid = rawStr;
   } else {
-    // Adiciona DDI 55 do Brasil se necessário
     if (!cleanDigits.startsWith("55") && !cleanDigits.startsWith("351") && (cleanDigits.length === 10 || cleanDigits.length === 11)) {
       cleanDigits = "55" + cleanDigits;
     }
@@ -233,7 +245,6 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
       return { success: false, error: "WhatsApp não está conectado. Escaneie o QR Code primeiro." };
     }
 
-    // Se o JID for padrão @s.whatsapp.net, valida no diretório do WhatsApp
     if (targetJid.endsWith("@s.whatsapp.net") && cleanDigits) {
       try {
         const onWaResult = await sock.onWhatsApp(cleanDigits);
@@ -252,6 +263,7 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
       phone: cleanDigits || targetJid,
       contactName: "Lead",
       direction: "OUTBOUND",
+      type: "TEXT",
       content: messageText,
       timestamp: new Date().toISOString(),
       status: "SENT"
@@ -261,13 +273,13 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
       messagesStore.push(newMsg);
     }
 
-    // Atualiza chat
     const chatKey = cleanDigits || targetJid;
     const existing = chatsStore.get(chatKey) || {};
     chatsStore.set(chatKey, {
       jid: targetJid,
       phone: chatKey,
       name: existing.name || `+${chatKey}`,
+      avatar: existing.avatar || null,
       lastMessage: messageText,
       timestamp: newMsg.timestamp,
       unreadCount: 0
@@ -276,6 +288,85 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
     return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
   } catch (err) {
     console.error(`❌ Erro ao enviar mensagem Baileys para ${targetJid}:`, err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Envio de ÁUDIO PTT (Nota de Voz Nativa) via Baileys
+export async function sendWhatsAppAudioMessage(targetInput, audioBase64) {
+  if (!targetInput || !audioBase64) return { success: false, error: "Destinatário ou áudio vazio." };
+
+  const rawStr = String(targetInput).trim();
+  let cleanDigits = rawStr.replace(/\D/g, "");
+  let targetJid = "";
+
+  const knownChat = chatsStore.get(cleanDigits) || chatsStore.get(rawStr);
+  if (knownChat && knownChat.jid) {
+    targetJid = knownChat.jid;
+  } else if (rawStr.includes("@")) {
+    targetJid = rawStr;
+  } else {
+    if (!cleanDigits.startsWith("55") && !cleanDigits.startsWith("351") && (cleanDigits.length === 10 || cleanDigits.length === 11)) {
+      cleanDigits = "55" + cleanDigits;
+    }
+    targetJid = `${cleanDigits}@s.whatsapp.net`;
+  }
+
+  try {
+    if (!sock || sessionState.status !== "CONNECTED") {
+      return { success: false, error: "WhatsApp não está conectado." };
+    }
+
+    if (targetJid.endsWith("@s.whatsapp.net") && cleanDigits) {
+      try {
+        const onWaResult = await sock.onWhatsApp(cleanDigits);
+        if (onWaResult && onWaResult.length > 0 && onWaResult[0]?.exists && onWaResult[0]?.jid) {
+          targetJid = onWaResult[0].jid;
+        }
+      } catch (e) {}
+    }
+
+    const cleanBase64 = audioBase64.replace(/^data:audio\/\w+;base64,/, "");
+    const audioBuffer = Buffer.from(cleanBase64, "base64");
+
+    console.log(`🎙️ [Baileys] Enviando Áudio PTT REAL para ${targetJid} (${audioBuffer.length} bytes)`);
+
+    const sentMsg = await sock.sendMessage(targetJid, {
+      audio: audioBuffer,
+      mimetype: "audio/mp4",
+      ptt: true // Push-to-talk (áudio nativo verde no WhatsApp)
+    });
+
+    const newMsg = {
+      id: sentMsg?.key?.id || `out_audio_${Date.now()}`,
+      jid: targetJid,
+      phone: cleanDigits || targetJid,
+      contactName: "Lead",
+      direction: "OUTBOUND",
+      type: "AUDIO",
+      content: "🎙️ Mensagem de Áudio",
+      audioBase64: `data:audio/mp4;base64,${cleanBase64}`,
+      timestamp: new Date().toISOString(),
+      status: "SENT"
+    };
+
+    messagesStore.push(newMsg);
+
+    const chatKey = cleanDigits || targetJid;
+    const existing = chatsStore.get(chatKey) || {};
+    chatsStore.set(chatKey, {
+      jid: targetJid,
+      phone: chatKey,
+      name: existing.name || `+${chatKey}`,
+      avatar: existing.avatar || null,
+      lastMessage: "🎙️ Mensagem de Áudio",
+      timestamp: newMsg.timestamp,
+      unreadCount: 0
+    });
+
+    return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
+  } catch (err) {
+    console.error(`❌ Erro ao enviar áudio Baileys para ${targetJid}:`, err);
     return { success: false, error: err.message };
   }
 }
@@ -320,6 +411,7 @@ export async function disconnectWhatsAppSession() {
   sessionState.status = "DISCONNECTED";
   sessionState.phone = "";
   sessionState.profileName = "";
+  sessionState.avatar = null;
   currentQrCodeDataUrl = null;
   chatsStore.clear();
   messagesStore = [];
