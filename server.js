@@ -1022,6 +1022,16 @@ app.post("/api/whatsapp/send-message", async (req, res) => {
   return res.json(result);
 });
 
+// 4.1 Obter Histórico Real de Mensagens
+app.get("/api/whatsapp/messages", (req, res) => {
+  const messages = getStoredMessages();
+  return res.json({
+    success: true,
+    count: messages.length,
+    messages: messages
+  });
+});
+
 // 5. Disparo em Massa Inteligente (Bulk Sender com Throttling Real)
 app.post("/api/whatsapp/bulk-send", async (req, res) => {
   const { leads = [], templateText = "", delaySeconds = 3 } = req.body;

@@ -106,6 +106,14 @@ export default function WhatsAppAutomationDashboard({
             setSession(data.session);
           }
         }
+
+        const msgRes = await fetch("http://localhost:3001/api/whatsapp/messages");
+        if (msgRes.ok) {
+          const msgData = await msgRes.json();
+          if (msgData.messages && msgData.messages.length > 0) {
+            setMessages(msgData.messages);
+          }
+        }
       } catch (e) {}
     }
 
