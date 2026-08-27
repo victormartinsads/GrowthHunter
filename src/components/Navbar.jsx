@@ -46,7 +46,7 @@ export default function Navbar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 6 Primary Workflow Tabs (Hick's Law / Chunking)
+  // 7 Primary Workflow Tabs (Hick's Law / Chunking)
   const primaryTabs = [
     { 
       id: "prospect_now", 
@@ -54,6 +54,13 @@ export default function Navbar({
       icon: Zap, 
       badge: hotCompaniesCount > 0 ? `${hotCompaniesCount} HOT` : null, 
       highlight: true 
+    },
+    { 
+      id: "cnpj_database", 
+      label: "Base CNPJ (Receita)", 
+      icon: Building2, 
+      badge: "28M", 
+      highlight: false 
     },
     { 
       id: "instagram", 
@@ -80,7 +87,7 @@ export default function Navbar({
     { 
       id: "companies", 
       label: "Base de Empresas", 
-      icon: Building2, 
+      icon: Briefcase, 
       badge: totalCompanies > 0 ? totalCompanies : null 
     },
     { 

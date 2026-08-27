@@ -2,11 +2,12 @@ import React, { useState, useMemo } from "react";
 import { 
   Kanban as KanbanIcon, MessageCircle, MapPin, ChevronRight, ChevronLeft, 
   Filter, Search, DollarSign, Users, TrendingUp, Layers, CheckCircle2, 
-  Star, Phone, ArrowUpRight, List, BarChart3, Plus, Sparkles, Clock, AlertCircle
+  Star, Phone, ArrowUpRight, List, BarChart3, Plus, Sparkles, Clock, AlertCircle, Download
 } from "lucide-react";
 import { PIPELINE_STAGES } from "../types/growthHunter";
 import { buildWhatsappUrl, buildGoogleMapsUrl } from "../utils/helpers";
 import { normalizeSegment } from "../utils/segmentClassifier";
+import { exportLeadsToSpreadsheet } from "../utils/spreadsheetExporter";
 
 export default function CrmPipelineView({ 
   companies = [], 
@@ -219,6 +220,28 @@ export default function CrmPipelineView({
             >
               <BarChart3 size={14} />
               <span>Previsão (Forecast)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => exportLeadsToSpreadsheet(filteredCompanies, { filename: "growthhunter_crm_pipeline" })}
+              className="btn-secondary"
+              style={{
+                padding: "0.45rem 0.8rem",
+                borderRadius: "6px",
+                fontSize: "0.8rem",
+                fontWeight: "700",
+                color: "#166534",
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.35rem"
+              }}
+            >
+              <Download size={14} color="#16a34a" />
+              <span>Exportar Planilha Excel</span>
             </button>
           </div>
         </div>

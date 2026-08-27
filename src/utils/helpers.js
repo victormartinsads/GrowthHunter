@@ -16,6 +16,21 @@ export const cleanPhoneDigits = (phoneStr) => {
     cleaned = cleaned.substring(1);
   }
 
+  // Se já começar com DDI Portugal (351)
+  if (cleaned.startsWith("351") && cleaned.length >= 12) {
+    return cleaned;
+  }
+
+  // Se já começar com DDI Brasil (55) e tiver 12 ou 13 dígitos
+  if (cleaned.startsWith("55") && (cleaned.length === 12 || cleaned.length === 13)) {
+    return cleaned;
+  }
+
+  // Se for número com 9 dígitos de Portugal (começando com 9 ou 2)
+  if (cleaned.length === 9 && (cleaned.startsWith("9") || cleaned.startsWith("2"))) {
+    return "351" + cleaned;
+  }
+
   // Se for número do Brasil com 10 ou 11 dígitos (DDD + Número sem 55)
   if (!cleaned.startsWith("55") && (cleaned.length === 10 || cleaned.length === 11)) {
     cleaned = "55" + cleaned;

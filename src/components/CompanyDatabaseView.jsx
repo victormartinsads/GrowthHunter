@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { normalizeSegment } from "../utils/segmentClassifier";
 import { buildWhatsappUrl, buildWebsiteUrl, buildGoogleMapsUrl } from "../utils/helpers";
+import { exportLeadsToSpreadsheet } from "../utils/spreadsheetExporter";
 
 export default function CompanyDatabaseView({ 
   companies = [], 
@@ -61,30 +62,14 @@ export default function CompanyDatabaseView({
     setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
-  const exportCsv = () => {
-    const headers = ["ID", "Empresa", "Categoria", "Cidade", "Website", "Score", "Meta Pixel", "GA4", "Score Oportunidade", "Oferta Recomendada", "Status CRM"];
-    const rows = filteredCompanies.map(c => [
-      c.id,
-      `"${c.name}"`,
-      `"${c.niche || c.category || ''}"`,
-      `"${c.city || ''}"`,
-      `"${c.website || ''}"`,
-      c.scores?.finalScore || 0,
-      c.tech_results?.metaPixel?.detected || 'not_detected',
-      c.tech_results?.ga4?.detected || 'not_detected',
-      c.scores?.opportunityScore || 0,
-      `"${c.scores?.primaryOffer?.title || ''}"`,
-      `"${c.pipeline_stage || c.status || 'NEW'}"`
-    ]);
+  const handleExportSpreadsheet = () => {
+    const listToExport = selectedIds.length > 0 
+      ? companies.filter(c => selectedIds.includes(c.id))
+      : filteredCompanies;
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `growthhunter_empresas_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportLeadsToSpreadsheet(listToExport, {
+      filename: `growthhunter_leads_${selectedNiche !== 'TODOS' ? selectedNiche.toLowerCase() : 'todas_categorias'}`
+    });
   };
 
   return (
@@ -115,9 +100,9 @@ export default function CompanyDatabaseView({
               </button>
             )}
 
-            <button className="btn-secondary" onClick={exportCsv} style={{ fontSize: "0.82rem" }}>
-              <Download size={15} />
-              <span>Exportar CSV</span>
+            <button className="btn-secondary" onClick={handleExportSpreadsheet} style={{ fontSize: "0.82rem", background: "#f0fdf4", color: "#166534", borderColor: "#bbf7d0" }}>
+              <Download size={15} color="#16a34a" />
+              <span>Exportar Planilha Excel / Sheets ({selectedIds.length > 0 ? `${selectedIds.length} selecionados` : 'Todos'})</span>
             </button>
 
             {selectedIds.length > 0 && onDeleteBatch && (

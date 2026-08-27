@@ -169,10 +169,10 @@ export default function DossierModal({
             <div style={{ padding: "0.85rem", borderRadius: "8px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: "0.8rem", fontWeight: "700", color: "#334155" }}>2. Velocidade no Celular</span>
-                {websiteScoreVal >= 50 ? <CheckCircle2 size={16} color="#16a34a" /> : <XCircle size={16} color="#dc2626" />}
+                {scoreVal >= 50 ? <CheckCircle2 size={16} color="#16a34a" /> : <XCircle size={16} color="#dc2626" />}
               </div>
-              <span style={{ fontSize: "0.74rem", color: websiteScoreVal >= 50 ? "#16a34a" : "#dc2626", display: "block", marginTop: "0.25rem" }}>
-                {websiteScoreVal >= 50 ? "Tempo de resposta aceitável" : "Lento no celular (taxa de rejeição > 60%)"}
+              <span style={{ fontSize: "0.74rem", color: scoreVal >= 50 ? "#16a34a" : "#dc2626", display: "block", marginTop: "0.25rem" }}>
+                {scoreVal >= 50 ? "Tempo de resposta aceitável" : "Lento no celular (taxa de rejeição > 60%)"}
               </span>
             </div>
 
