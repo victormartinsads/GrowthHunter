@@ -152,29 +152,38 @@ export default function WhatsAppAutomationDashboard({
     }
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || !activeChatPhone) return;
 
-    const newMsg = {
-      id: `msg_${Date.now()}`,
-      phone: activeChatPhone,
-      companyName: "Lead",
-      direction: "OUTBOUND",
-      content: chatInput,
-      timestamp: new Date().toISOString(),
-      status: "SENT"
-    };
-
-    setMessages(prev => [...prev, newMsg]);
+    const messageText = chatInput.trim();
+    const cleanPhone = String(activeChatPhone).replace(/\D/g, "");
     setChatInput("");
 
-    // Dispara no backend
-    fetch("http://localhost:3001/api/whatsapp/send-message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: activeChatPhone, message: chatInput })
-    }).catch(() => {});
+    try {
+      const res = await fetch("http://localhost:3001/api/whatsapp/send-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleanPhone, message: messageText })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Atualiza as mensagens imediatamente
+        const msgRes = await fetch("http://localhost:3001/api/whatsapp/messages");
+        if (msgRes.ok) {
+          const msgData = await msgRes.json();
+          if (msgData.messages) {
+            setMessages(msgData.messages);
+          }
+        }
+      } else {
+        showToast?.(data.error || "Falha ao enviar mensagem pelo WhatsApp.", "error");
+      }
+    } catch (err) {
+      console.error("Erro ao enviar mensagem:", err);
+      showToast?.("Erro de conexão ao enviar mensagem.", "error");
+    }
   };
 
   const handleAddKeywordRule = (e) => {

@@ -246,43 +246,64 @@ async function processAutomationReply(phone, incomingText) {
 
 // Envio de mensagem real via Baileys
 export async function sendWhatsAppRealMessage(phone, messageText) {
-  const cleanPhone = String(phone).replace(/\D/g, "");
-  if (!cleanPhone || !messageText) return { success: false, error: "Dados inválidos." };
+  let cleanPhone = String(phone).replace(/\D/g, "");
+  if (!cleanPhone || !messageText) return { success: false, error: "Telefone ou mensagem inválidos." };
 
-  const targetJid = `${cleanPhone}@s.whatsapp.net`;
+  // Se o número não tiver DDI (ex: 11999998888 com 10 ou 11 dígitos), adiciona 55 (Brasil)
+  if (!cleanPhone.startsWith("55") && !cleanPhone.startsWith("351") && (cleanPhone.length === 10 || cleanPhone.length === 11)) {
+    cleanPhone = "55" + cleanPhone;
+  }
+
+  let targetJid = `${cleanPhone}@s.whatsapp.net`;
 
   try {
     if (sock && sessionState.status === "CONNECTED") {
-      await sock.sendMessage(targetJid, { text: messageText });
-      console.log(`🚀 [Baileys] Mensagem REAL enviada para +${cleanPhone}: "${messageText.slice(0, 40)}..."`);
+      // 1. Resolve o JID oficial exato via WhatsApp directory (resolve 9º dígito do Brasil automaticamente)
+      try {
+        const onWaResult = await sock.onWhatsApp(cleanPhone);
+        if (onWaResult && onWaResult.length > 0 && onWaResult[0]?.exists && onWaResult[0]?.jid) {
+          targetJid = onWaResult[0].jid;
+          console.log(`🎯 [Baileys] JID verificado e validado pelo WhatsApp: ${targetJid}`);
+        }
+      } catch (e) {
+        console.log("Nota: verificação onWhatsApp não retornou JID específico, usando padrão:", targetJid);
+      }
+
+      // 2. Dispara a mensagem via WebSocket
+      const sentMsg = await sock.sendMessage(targetJid, { text: messageText });
+      console.log(`🚀 [Baileys] Mensagem REAL entregue para ${targetJid}: "${messageText}"`);
+
+      const newMsg = {
+        id: sentMsg?.key?.id || `out_${Date.now()}`,
+        phone: cleanPhone,
+        contactName: "Lead",
+        direction: "OUTBOUND",
+        content: messageText,
+        timestamp: new Date().toISOString(),
+        status: "SENT"
+      };
+
+      if (!messagesStore.some(m => m.id === newMsg.id)) {
+        messagesStore.push(newMsg);
+      }
+
+      // Atualiza chat
+      const existing = chatsStore.get(cleanPhone) || {};
+      chatsStore.set(cleanPhone, {
+        phone: cleanPhone,
+        name: existing.name || `+${cleanPhone}`,
+        lastMessage: messageText,
+        timestamp: newMsg.timestamp,
+        unreadCount: 0
+      });
+
+      return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
     } else {
-      console.log(`📝 [Simulação/Offline] Mensagem salva localmente para +${cleanPhone}: "${messageText.slice(0, 40)}..."`);
+      console.warn(`⚠️ WhatsApp desconectado ao tentar enviar para +${cleanPhone}`);
+      return { success: false, error: "WhatsApp desconectado. Conecte pelo QR Code antes de enviar." };
     }
-
-    const newMsg = {
-      id: `out_${Date.now()}`,
-      phone: cleanPhone,
-      contactName: "Lead",
-      direction: "OUTBOUND",
-      content: messageText,
-      timestamp: new Date().toISOString(),
-      status: "SENT"
-    };
-    messagesStore.push(newMsg);
-
-    // Atualiza chat
-    const existing = chatsStore.get(cleanPhone) || {};
-    chatsStore.set(cleanPhone, {
-      phone: cleanPhone,
-      name: existing.name || `+${cleanPhone}`,
-      lastMessage: messageText,
-      timestamp: newMsg.timestamp,
-      unreadCount: 0
-    });
-
-    return { success: true, messageId: newMsg.id, status: "SENT" };
   } catch (err) {
-    console.error(`Erro ao enviar mensagem Baileys para +${cleanPhone}:`, err);
+    console.error(`❌ Erro ao enviar mensagem Baileys para +${cleanPhone}:`, err);
     return { success: false, error: err.message };
   }
 }
