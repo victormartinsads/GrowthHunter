@@ -7,6 +7,7 @@ import CrmPipelineView from "./components/CrmPipelineView";
 import CampaignsView from "./components/CampaignsView";
 import DashboardView from "./components/DashboardView";
 import SettingsView from "./components/SettingsView";
+import WhatsAppAutomationDashboard from "./components/WhatsAppAutomationDashboard";
 import WhatsAppInboxView from "./components/WhatsAppInboxView";
 import WhatsAppSettingsView from "./components/WhatsAppSettingsView";
 import SystemHealthView from "./components/SystemHealthView";
@@ -307,12 +308,12 @@ export default function App() {
           />
         )}
 
-        {/* 2. WhatsApp Inbox */}
+        {/* 2. WhatsApp & Automação Suite */}
         {activeTab === "whatsapp" && (
-          <WhatsAppInboxView 
+          <WhatsAppAutomationDashboard 
             companies={companies}
-            onSelectCompany={(comp) => setSelectedCompanyForProfile(comp)}
             onUpdatePipelineStage={handleUpdatePipelineStage}
+            showToast={showToast}
           />
         )}
 

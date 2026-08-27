@@ -75,8 +75,9 @@ export default function Navbar({
     },
     { 
       id: "whatsapp", 
-      label: "WhatsApp Inbox", 
+      label: "WhatsApp & Automação", 
       icon: MessageCircle, 
+      badge: "QR / Bot", 
       highlight: false 
     },
     { 
