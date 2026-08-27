@@ -4,6 +4,7 @@ import * as cheerio from "cheerio";
 import { 
   initWhatsAppBaileys, 
   getWhatsAppSession, 
+  getRealChats,
   sendWhatsAppRealMessage, 
   getStoredMessages, 
   getAutomationRules, 
@@ -1022,9 +1023,20 @@ app.post("/api/whatsapp/send-message", async (req, res) => {
   return res.json(result);
 });
 
-// 4.1 Obter Histórico Real de Mensagens
+// 4.1 Obter Lista de Conversas Reais Sincronizadas
+app.get("/api/whatsapp/chats", (req, res) => {
+  const chats = getRealChats();
+  return res.json({
+    success: true,
+    count: chats.length,
+    chats: chats
+  });
+});
+
+// 4.2 Obter Histórico Real de Mensagens
 app.get("/api/whatsapp/messages", (req, res) => {
-  const messages = getStoredMessages();
+  const phoneFilter = req.query.phone;
+  const messages = getStoredMessages(phoneFilter);
   return res.json({
     success: true,
     count: messages.length,

@@ -20,7 +20,10 @@ let sessionState = {
   battery: 100
 };
 
-let messagesStore = [];
+// Armazenamento 100% REAL de conversas e mensagens
+let chatsStore = new Map(); // key: phone, value: { phone, name, lastMessage, timestamp, unreadCount }
+let messagesStore = []; // array de { id, phone, name, direction, content, timestamp, status }
+
 let automationRules = {
   welcomeEnabled: true,
   welcomeMessage: "Olá! Obrigado pelo contato com a nossa equipe. Como podemos te ajudar hoje?",
@@ -65,7 +68,7 @@ export async function initWhatsAppBaileys() {
       printQRInTerminal: false,
       auth: state,
       browser: ["GrowthHunter CRM", "Chrome", "1.0.0"],
-      syncFullHistory: false
+      syncFullHistory: true
     });
 
     sock.ev.on("creds.update", saveCreds);
@@ -119,34 +122,80 @@ export async function initWhatsAppBaileys() {
       }
     });
 
-    // Escuta mensagens recebidas (Inbound)
+    // Escuta contatos sincronizados
+    sock.ev.on("contacts.upsert", (contacts) => {
+      for (const contact of contacts) {
+        if (!contact.id || contact.id.includes("@g.us")) continue; // ignora grupos
+        const phone = contact.id.split("@")[0].replace(/\D/g, "");
+        if (!phone) continue;
+
+        const name = contact.notify || contact.name || contact.verifiedName || `+${phone}`;
+        const existing = chatsStore.get(phone) || {};
+        chatsStore.set(phone, {
+          phone,
+          name: name,
+          lastMessage: existing.lastMessage || "",
+          timestamp: existing.timestamp || new Date().toISOString(),
+          unreadCount: existing.unreadCount || 0
+        });
+      }
+    });
+
+    // Escuta mensagens recebidas e enviadas reais (Inbound & Outbound)
     sock.ev.on("messages.upsert", async ({ messages: newMessages, type }) => {
-      if (type !== "notify") return;
-
       for (const msg of newMessages) {
-        if (!msg.message || msg.key.fromMe) continue;
+        if (!msg.message) continue;
 
-        const senderJid = msg.key.remoteJid;
+        const senderJid = msg.key.remoteJid || "";
+        if (senderJid.includes("@g.us") || senderJid === "status@broadcast") continue; // ignora grupos e status
+
         const cleanPhone = senderJid.replace("@s.whatsapp.net", "").replace(/\D/g, "");
-        const textContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+        if (!cleanPhone) continue;
+
+        const textContent = msg.message?.conversation || 
+                            msg.message?.extendedTextMessage?.text || 
+                            msg.message?.imageMessage?.caption || 
+                            (msg.message?.imageMessage ? "📷 Imagem" : "") ||
+                            (msg.message?.audioMessage ? "🎵 Áudio" : "") ||
+                            (msg.message?.documentMessage ? "📄 Documento" : "") ||
+                            "";
 
         if (!textContent) continue;
 
-        console.log(`📩 [WhatsApp Recebido de +${cleanPhone}]: ${textContent}`);
+        const isFromMe = Boolean(msg.key.fromMe);
+        const contactName = msg.pushName || `+${cleanPhone}`;
+
+        console.log(`📩 [WhatsApp ${isFromMe ? "ENVIADO" : "RECEBIDO"} | +${cleanPhone}]: ${textContent}`);
 
         const storedMsg = {
-          id: msg.key.id || `in_${Date.now()}`,
+          id: msg.key.id || `msg_${Date.now()}`,
           phone: cleanPhone,
-          companyName: msg.pushName || "Contato",
-          direction: "INBOUND",
+          contactName: contactName,
+          direction: isFromMe ? "OUTBOUND" : "INBOUND",
           content: textContent,
-          timestamp: new Date().toISOString(),
-          status: "DELIVERED"
+          timestamp: msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString(),
+          status: isFromMe ? "SENT" : "DELIVERED"
         };
-        messagesStore.push(storedMsg);
 
-        // Avaliar Regras de Automação
-        await processAutomationReply(cleanPhone, textContent);
+        // Evita duplicatas
+        if (!messagesStore.some(m => m.id === storedMsg.id)) {
+          messagesStore.push(storedMsg);
+        }
+
+        // Atualiza a lista de conversas reais
+        const existingChat = chatsStore.get(cleanPhone) || {};
+        chatsStore.set(cleanPhone, {
+          phone: cleanPhone,
+          name: existingChat.name && !existingChat.name.startsWith("+") ? existingChat.name : contactName,
+          lastMessage: textContent,
+          timestamp: storedMsg.timestamp,
+          unreadCount: isFromMe ? 0 : (existingChat.unreadCount || 0) + 1
+        });
+
+        // Se for mensagem recebida de cliente, processar regras de automação
+        if (!isFromMe && type === "notify") {
+          await processAutomationReply(cleanPhone, textContent);
+        }
       }
     });
 
@@ -213,13 +262,23 @@ export async function sendWhatsAppRealMessage(phone, messageText) {
     const newMsg = {
       id: `out_${Date.now()}`,
       phone: cleanPhone,
-      companyName: "Lead",
+      contactName: "Lead",
       direction: "OUTBOUND",
       content: messageText,
       timestamp: new Date().toISOString(),
       status: "SENT"
     };
     messagesStore.push(newMsg);
+
+    // Atualiza chat
+    const existing = chatsStore.get(cleanPhone) || {};
+    chatsStore.set(cleanPhone, {
+      phone: cleanPhone,
+      name: existing.name || `+${cleanPhone}`,
+      lastMessage: messageText,
+      timestamp: newMsg.timestamp,
+      unreadCount: 0
+    });
 
     return { success: true, messageId: newMsg.id, status: "SENT" };
   } catch (err) {
@@ -235,7 +294,15 @@ export function getWhatsAppSession() {
   };
 }
 
-export function getStoredMessages() {
+export function getRealChats() {
+  return Array.from(chatsStore.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+}
+
+export function getStoredMessages(phoneFilter = null) {
+  if (phoneFilter) {
+    const clean = String(phoneFilter).replace(/\D/g, "");
+    return messagesStore.filter(m => m.phone === clean);
+  }
   return messagesStore;
 }
 
@@ -260,6 +327,8 @@ export async function disconnectWhatsAppSession() {
   sessionState.phone = "";
   sessionState.profileName = "";
   currentQrCodeDataUrl = null;
+  chatsStore.clear();
+  messagesStore = [];
   
   try {
     fs.rmSync(AUTH_DIR, { recursive: true, force: true });

@@ -26,29 +26,13 @@ export default function WhatsAppAutomationDashboard({
   });
   const [isLoadingQr, setIsLoadingQr] = useState(false);
 
-  // Live Chat State
-  const [messages, setMessages] = useState([
-    {
-      id: "msg_1",
-      phone: "5511998887766",
-      companyName: "Clínica Sorriso Perfeito",
-      direction: "OUTBOUND",
-      content: "Olá! Sou da GrowthHunter e notei que a página de vocês pode dobrar as consultas no WhatsApp.",
-      timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-      status: "READ"
-    },
-    {
-      id: "msg_2",
-      phone: "5511998887766",
-      companyName: "Clínica Sorriso Perfeito",
-      direction: "INBOUND",
-      content: "Olá! Como funciona e qual o preço para desenvolver um site de alta conversão?",
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-      status: "DELIVERED"
-    }
-  ]);
+  // Live Chat State (100% REAL)
+  const [realChats, setRealChats] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
-  const [activeChatPhone, setActiveChatPhone] = useState("5511998887766");
+  const [activeChatPhone, setActiveChatPhone] = useState(companies[0]?.phone || "");
+  const [chatSidebarTab, setChatSidebarTab] = useState("chats"); // "chats" | "crm"
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
 
   // Automation Rules State
   const [rules, setRules] = useState({
@@ -93,7 +77,7 @@ export default function WhatsAppAutomationDashboard({
   const [newKeyword, setNewKeyword] = useState("");
   const [newReply, setNewReply] = useState("");
 
-  // Carregar status da sessão periodicamente (Polling a cada 2.5s quando não conectado)
+  // Carregar status da sessão e conversas reais periodicamente
   useEffect(() => {
     let intervalId = null;
 
@@ -107,10 +91,21 @@ export default function WhatsAppAutomationDashboard({
           }
         }
 
+        const chatsRes = await fetch("http://localhost:3001/api/whatsapp/chats");
+        if (chatsRes.ok) {
+          const chatsData = await chatsRes.json();
+          if (chatsData.chats) {
+            setRealChats(chatsData.chats);
+            if (!activeChatPhone && chatsData.chats.length > 0) {
+              setActiveChatPhone(chatsData.chats[0].phone);
+            }
+          }
+        }
+
         const msgRes = await fetch("http://localhost:3001/api/whatsapp/messages");
         if (msgRes.ok) {
           const msgData = await msgRes.json();
-          if (msgData.messages && msgData.messages.length > 0) {
+          if (msgData.messages) {
             setMessages(msgData.messages);
           }
         }
@@ -126,7 +121,7 @@ export default function WhatsAppAutomationDashboard({
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, []);
+  }, [activeChatPhone]);
 
   const handleGenerateQr = async () => {
     setIsLoadingQr(true);
@@ -479,89 +474,282 @@ export default function WhatsAppAutomationDashboard({
         </div>
       )}
 
-      {/* ── 2. LIVE CHAT INBOX ── */}
-      {activeTab === "live_chat" && (
-        <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: "1rem", height: "560px" }}>
-          
-          {/* Chats List */}
-          <div className="glass-card" style={{ padding: "0.85rem", background: "#ffffff", border: "1px solid #e8e6e0", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <span style={{ fontSize: "0.75rem", fontWeight: "800", color: "#64748b", textTransform: "uppercase" }}>
-              Conversas Recentes:
-            </span>
+      {/* ── 2. LIVE CHAT INBOX (100% REAL) ── */}
+      {activeTab === "live_chat" && (() => {
+        const cleanActivePhone = String(activeChatPhone || "").replace(/\D/g, "");
+        const currentChatMessages = messages.filter(m => String(m.phone).replace(/\D/g, "") === cleanActivePhone);
+        const activeLead = companies.find(c => String(c.phone).replace(/\D/g, "") === cleanActivePhone);
+        const activeChatInfo = realChats.find(c => String(c.phone).replace(/\D/g, "") === cleanActivePhone) || (activeLead ? { phone: cleanActivePhone, name: activeLead.name } : { phone: cleanActivePhone, name: cleanActivePhone ? `+${cleanActivePhone}` : "Selecione um contato" });
 
-            {companies.slice(0, 10).map((c, i) => (
-              <div
-                key={c.id}
-                onClick={() => setActiveChatPhone(c.phone || "5511998887766")}
-                style={{
-                  padding: "0.75rem",
-                  borderRadius: "8px",
-                  background: activeChatPhone === (c.phone || "5511998887766") ? "#f0fdf4" : "#fafaf9",
-                  border: activeChatPhone === (c.phone || "5511998887766") ? "1.5px solid #16a34a" : "1px solid #e8e6e0",
-                  cursor: "pointer"
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong style={{ fontSize: "0.84rem", color: "#1c1917" }}>{c.name}</strong>
-                  <span style={{ fontSize: "0.68rem", color: "#94a3b8" }}>14:30</span>
-                </div>
-                <span style={{ fontSize: "0.74rem", color: "#64748b", display: "block", marginTop: "2px" }}>
-                  {normalizeSegment(c.niche || c.category)} • {c.city}
-                </span>
-              </div>
-            ))}
-          </div>
+        const filteredRealChats = realChats.filter(c => 
+          (c.name || "").toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
+          (c.phone || "").includes(chatSearchQuery) ||
+          (c.lastMessage || "").toLowerCase().includes(chatSearchQuery.toLowerCase())
+        );
 
-          {/* Chat Messages Panel */}
-          <div className="glass-card" style={{ padding: "1.25rem", background: "#ffffff", border: "1px solid #e8e6e0", display: "flex", flexDirection: "column" }}>
+        const filteredCrmLeads = companies.filter(c => 
+          (c.name || "").toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
+          (c.phone || "").includes(chatSearchQuery) ||
+          (c.city || "").toLowerCase().includes(chatSearchQuery.toLowerCase())
+        );
+
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: "1rem", height: "600px" }}>
             
-            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem", paddingRight: "0.5rem" }}>
-              {messages.map(msg => (
-                <div
-                  key={msg.id}
+            {/* Sidebar: Chats List */}
+            <div className="glass-card" style={{ padding: "0.85rem", background: "#ffffff", border: "1px solid #e8e6e0", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              
+              {/* Search */}
+              <div style={{ position: "relative" }}>
+                <Search size={14} color="#78716c" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)" }} />
+                <input
+                  type="text"
+                  className="glass-input"
+                  placeholder="Buscar conversas ou contatos..."
+                  style={{ width: "100%", paddingLeft: "2rem", fontSize: "0.78rem" }}
+                  value={chatSearchQuery}
+                  onChange={(e) => setChatSearchQuery(e.target.value)}
+                />
+              </div>
+
+              {/* Sidebar Tabs Switcher (WhatsApp Chats / CRM Leads) */}
+              <div style={{ display: "flex", background: "#f8fafc", padding: "0.2rem", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                <button
+                  onClick={() => setChatSidebarTab("chats")}
                   style={{
-                    alignSelf: msg.direction === "OUTBOUND" ? "flex-end" : "flex-start",
-                    maxWidth: "75%",
-                    background: msg.direction === "OUTBOUND" ? "#dcf8c6" : "#f1f5f9",
-                    padding: "0.75rem 1rem",
-                    borderRadius: "10px",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+                    flex: 1,
+                    padding: "0.35rem 0.5rem",
+                    borderRadius: "4px",
+                    fontSize: "0.72rem",
+                    fontWeight: chatSidebarTab === "chats" ? "800" : "600",
+                    background: chatSidebarTab === "chats" ? "#ffffff" : "transparent",
+                    color: chatSidebarTab === "chats" ? "#16a34a" : "#64748b",
+                    border: "none",
+                    cursor: "pointer",
+                    boxShadow: chatSidebarTab === "chats" ? "0 1px 3px rgba(0,0,0,0.06)" : "none"
                   }}
                 >
-                  <p style={{ margin: 0, fontSize: "0.84rem", color: "#0f172a", lineHeight: "1.4" }}>
-                    {msg.content}
-                  </p>
-                  <span style={{ fontSize: "0.68rem", color: "#64748b", display: "block", textAlign: "right", marginTop: "4px" }}>
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {msg.status}
-                  </span>
-                </div>
-              ))}
+                  WhatsApp ({realChats.length})
+                </button>
+                <button
+                  onClick={() => setChatSidebarTab("crm")}
+                  style={{
+                    flex: 1,
+                    padding: "0.35rem 0.5rem",
+                    borderRadius: "4px",
+                    fontSize: "0.72rem",
+                    fontWeight: chatSidebarTab === "crm" ? "800" : "600",
+                    background: chatSidebarTab === "crm" ? "#ffffff" : "transparent",
+                    color: chatSidebarTab === "crm" ? "#16a34a" : "#64748b",
+                    border: "none",
+                    cursor: "pointer",
+                    boxShadow: chatSidebarTab === "crm" ? "0 1px 3px rgba(0,0,0,0.06)" : "none"
+                  }}
+                >
+                  Leads CRM ({companies.length})
+                </button>
+              </div>
+
+              {/* Conversations Scrollable List */}
+              <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                
+                {chatSidebarTab === "chats" && (
+                  filteredRealChats.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "2rem 1rem", color: "#94a3b8", fontSize: "0.8rem" }}>
+                      <MessageCircle size={28} color="#cbd5e1" style={{ margin: "0 auto 0.5rem auto" }} />
+                      <strong style={{ display: "block", color: "#64748b", fontSize: "0.84rem" }}>Nenhuma conversa ativa no WhatsApp</strong>
+                      <span style={{ fontSize: "0.74rem", display: "block", marginTop: "0.25rem" }}>
+                        Quando você ou um cliente enviar mensagem, ela aparecerá aqui em tempo real.
+                      </span>
+                    </div>
+                  ) : (
+                    filteredRealChats.map((chat) => {
+                      const isSelected = cleanActivePhone === chat.phone;
+                      return (
+                        <div
+                          key={chat.phone}
+                          onClick={() => setActiveChatPhone(chat.phone)}
+                          style={{
+                            padding: "0.65rem 0.75rem",
+                            borderRadius: "8px",
+                            background: isSelected ? "#f0fdf4" : "#fafaf9",
+                            border: isSelected ? "1.5px solid #16a34a" : "1px solid #e8e6e0",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease"
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <strong style={{ fontSize: "0.82rem", color: "#1c1917", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px" }}>
+                              {chat.name || `+${chat.phone}`}
+                            </strong>
+                            <span style={{ fontSize: "0.66rem", color: "#94a3b8" }}>
+                              {chat.timestamp ? new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                            </span>
+                          </div>
+                          <p style={{ margin: "0.2rem 0 0 0", fontSize: "0.74rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {chat.lastMessage || `+${chat.phone}`}
+                          </p>
+                        </div>
+                      );
+                    })
+                  )
+                )}
+
+                {chatSidebarTab === "crm" && (
+                  filteredCrmLeads.map((c) => {
+                    const isSelected = cleanActivePhone === String(c.phone || "").replace(/\D/g, "");
+                    return (
+                      <div
+                        key={c.id}
+                        onClick={() => setActiveChatPhone(c.phone)}
+                        style={{
+                          padding: "0.65rem 0.75rem",
+                          borderRadius: "8px",
+                          background: isSelected ? "#f0fdf4" : "#fafaf9",
+                          border: isSelected ? "1.5px solid #16a34a" : "1px solid #e8e6e0",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <strong style={{ fontSize: "0.82rem", color: "#1c1917", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "190px" }}>
+                            {c.name}
+                          </strong>
+                          <span style={{ fontSize: "0.66rem", color: "#16a34a", fontWeight: "700" }}>
+                            {c.scores?.finalScore ? `${c.scores.finalScore} pts` : ""}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "0.72rem", color: "#64748b", display: "block", marginTop: "2px" }}>
+                          {normalizeSegment(c.niche || c.category)} • {c.city || "Brasil"}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+
+              </div>
             </div>
 
-            {/* Input message form */}
-            <form onSubmit={handleSendMessage} style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid #f1f5f9" }}>
-              <input
-                type="text"
-                className="glass-input"
-                style={{ flex: 1, fontSize: "0.85rem" }}
-                placeholder="Digite a mensagem para o WhatsApp..."
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-              />
-              <button
-                type="submit"
-                className="btn-primary"
-                style={{ background: "#16a34a", border: "none", display: "flex", alignItems: "center", gap: "0.3rem" }}
-              >
-                <Send size={15} />
-                <span>Enviar</span>
-              </button>
-            </form>
+            {/* Chat Messages Panel */}
+            <div className="glass-card" style={{ padding: "0", background: "#ffffff", border: "1px solid #e8e6e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              
+              {/* Active Contact Header */}
+              <div style={{
+                padding: "0.85rem 1.25rem",
+                borderBottom: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <div style={{
+                    width: "38px",
+                    height: "38px",
+                    borderRadius: "50%",
+                    background: "#dcfce7",
+                    color: "#15803d",
+                    fontWeight: "900",
+                    fontSize: "0.95rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}>
+                    {(activeChatInfo.name || "W")[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <strong style={{ fontSize: "0.92rem", color: "#0f172a", display: "block" }}>
+                      {activeChatInfo.name || "Selecione uma conversa"}
+                    </strong>
+                    <span style={{ fontSize: "0.72rem", color: "#64748b" }}>
+                      {cleanActivePhone ? `+${cleanActivePhone}` : "Nenhum telefone selecionado"} • {session.status === "CONNECTED" ? "🟢 WhatsApp Conectado" : "🔴 Desconectado"}
+                    </span>
+                  </div>
+                </div>
+
+                {cleanActivePhone && (
+                  <a
+                    href={buildWhatsappUrl(cleanActivePhone)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary"
+                    style={{ fontSize: "0.74rem", padding: "0.35rem 0.65rem", display: "flex", alignItems: "center", gap: "0.3rem" }}
+                  >
+                    <ExternalLink size={13} />
+                    <span>Abrir no App</span>
+                  </a>
+                )}
+              </div>
+
+              {/* Messages Flow */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem", background: "#f8fafc" }}>
+                {currentChatMessages.length === 0 ? (
+                  <div style={{ textAlign: "center", margin: "auto", maxWidth: "420px", padding: "2rem" }}>
+                    <div style={{ width: "52px", height: "52px", background: "#f0fdf4", color: "#16a34a", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem auto" }}>
+                      <MessageCircle size={26} />
+                    </div>
+                    <strong style={{ fontSize: "0.95rem", color: "#1c1917", display: "block" }}>
+                      Nenhuma mensagem trocada ainda com este contato
+                    </strong>
+                    <p style={{ fontSize: "0.78rem", color: "#64748b", margin: "0.4rem 0 0 0", lineHeight: "1.4" }}>
+                      Digite sua mensagem no campo abaixo para iniciar o atendimento pelo WhatsApp em tempo real.
+                    </p>
+                  </div>
+                ) : (
+                  currentChatMessages.map(msg => {
+                    const isOutbound = msg.direction === "OUTBOUND";
+                    return (
+                      <div
+                        key={msg.id}
+                        style={{
+                          alignSelf: isOutbound ? "flex-end" : "flex-start",
+                          maxWidth: "75%",
+                          background: isOutbound ? "#dcf8c6" : "#ffffff",
+                          padding: "0.75rem 1rem",
+                          borderRadius: isOutbound ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                          border: isOutbound ? "none" : "1px solid #e2e8f0"
+                        }}
+                      >
+                        <p style={{ margin: 0, fontSize: "0.84rem", color: "#0f172a", lineHeight: "1.4", whiteSpace: "pre-wrap" }}>
+                          {msg.content}
+                        </p>
+                        <span style={{ fontSize: "0.66rem", color: "#64748b", display: "block", textAlign: "right", marginTop: "4px" }}>
+                          {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""} • {isOutbound ? (msg.status || "Enviado") : "Recebido"}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Input Form */}
+              <form onSubmit={handleSendMessage} style={{ padding: "0.85rem 1.25rem", background: "#ffffff", borderTop: "1px solid #e2e8f0", display: "flex", gap: "0.5rem" }}>
+                <input
+                  type="text"
+                  className="glass-input"
+                  style={{ flex: 1, fontSize: "0.84rem" }}
+                  placeholder={cleanActivePhone ? "Digite a mensagem para enviar no WhatsApp..." : "Selecione um contato na lista ao lado..."}
+                  disabled={!cleanActivePhone}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  disabled={!cleanActivePhone || !chatInput.trim()}
+                  className="btn-primary"
+                  style={{ background: "#16a34a", border: "none", display: "flex", alignItems: "center", gap: "0.35rem", padding: "0.55rem 1rem" }}
+                >
+                  <Send size={15} />
+                  <span>Enviar</span>
+                </button>
+              </form>
+
+            </div>
 
           </div>
-
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── 3. REGRAS DE AUTOMAÇÃO ── */}
       {activeTab === "automation_rules" && (
