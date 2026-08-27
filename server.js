@@ -1,6 +1,15 @@
 import express from "express";
 import cors from "cors";
 import * as cheerio from "cheerio";
+import { 
+  initWhatsAppBaileys, 
+  getWhatsAppSession, 
+  sendWhatsAppRealMessage, 
+  getStoredMessages, 
+  getAutomationRules, 
+  updateAutomationRules, 
+  disconnectWhatsAppSession 
+} from "./whatsappEngine.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -816,57 +825,7 @@ app.get("/api/cnpj/lookup/:cnpj", async (req, res) => {
 });
 
 /**
- * Gera um CNPJ válido com dígitos verificadores corretos
- */
-function generateValidCnpj(seedStr = "") {
-  let hash = 0;
-  for (let i = 0; i < seedStr.length; i++) {
-    hash = ((hash << 5) - hash) + seedStr.charCodeAt(i);
-    hash |= 0;
-  }
-  const posHash = Math.abs(hash);
-  const n1 = Math.floor((posHash % 90) + 10);
-  const n2 = Math.floor(((posHash * 3) % 900) + 100);
-  const n3 = Math.floor(((posHash * 7) % 900) + 100);
-  const root = `${n1}${n2}${n3}0001`;
-
-  // Calcula dígitos verificadores oficiais
-  let sum = 0;
-  let weight = 5;
-  for (let i = 0; i < 12; i++) {
-    sum += parseInt(root[i]) * weight;
-    weight = weight === 2 ? 9 : weight - 1;
-  }
-  let rem = sum % 11;
-  const d1 = rem < 2 ? 0 : 11 - rem;
-
-  sum = 0;
-  weight = 6;
-  const rootD1 = root + d1;
-  for (let i = 0; i < 13; i++) {
-    sum += parseInt(rootD1[i]) * weight;
-    weight = weight === 2 ? 9 : weight - 1;
-  }
-  rem = sum % 11;
-  const d2 = rem < 2 ? 0 : 11 - rem;
-
-  return `${root}${d1}${d2}`;
-}
-
-const COMMON_FIRST_NAMES = [
-  "Eduardo", "Rodrigo", "Carlos", "Marcelo", "Juliana", "Patricia", "Camila", 
-  "Fernando", "Rafael", "Mariana", "Bruno", "Renata", "Lucas", "Beatriz", 
-  "Gustavo", "Larissa", "Felipe", "Vanessa", "Alexandre", "Fernanda", "Thiago", "Carla"
-];
-
-const COMMON_LAST_NAMES = [
-  "Silva", "Santos", "Oliveira", "Souza", "Rodrigues", "Ferreira", "Alves", 
-  "Pereira", "Lima", "Gomes", "Costa", "Ribeiro", "Martins", "Carvalho", 
-  "Almeida", "Lopes", "Soares", "Fernandes", "Vieira", "Barbosa", "Rocha", "Dias"
-];
-
-/**
- * Busca de CNPJs por Nicho/CNAE, Estado e Cidade com extração de dados cadastrais
+ * Busca de CNPJs REAIS por Nicho/CNAE, Estado e Cidade com consulta oficial na BrasilAPI / Minha Receita
  */
 app.post("/api/cnpj/search", async (req, res) => {
   const { 
@@ -876,115 +835,118 @@ app.post("/api/cnpj/search", async (req, res) => {
     city = "", 
     onlyActive = true, 
     onlyWithPhone = true, 
-    limit = 25 
+    limit = 20 
   } = req.body;
 
   try {
-    const cleanCity = (city || "São Paulo").trim();
+    const cleanCity = (city || "").trim();
     const cleanState = (state || "SP").trim().toUpperCase();
-    const cleanNiche = (niche || cnae || "Comércio").trim();
-    const searchLimit = Math.min(Math.max(Number(limit) || 25, 5), 50);
+    const cleanNiche = (niche || cnae || "Empresas").trim();
+    const searchLimit = Math.min(Math.max(Number(limit) || 20, 5), 40);
 
-    console.log(`🏛️ [CNPJ Search] Buscando CNPJs da Receita Federal: Nicho="${cleanNiche}", UF="${cleanState}", Cidade="${cleanCity}", Limite=${searchLimit}`);
+    console.log(`🏛️ [CNPJ Search REAL] Buscando CNPJs Oficiais: Nicho="${cleanNiche}", UF="${cleanState}", Cidade="${cleanCity}", Limite=${searchLimit}`);
 
-    const locationQuery = `${cleanCity}, ${cleanState}`;
-    const cityMeta = getCityMeta(locationQuery);
-    const ddd = cityMeta.ddd || "11";
+    const discoveredCnpjs = new Set();
 
-    // 1. Extrai estabelecimentos reais locais da região
-    const nativePlaces = await scrapeGrowthHunterNative(cleanNiche, locationQuery, searchLimit);
-    
-    // 2. Mapeia CNAE correspondente
-    const matchedCnae = POPULAR_CNAES.find(c => 
-      cleanNiche.toLowerCase().includes(c.nicho.toLowerCase()) || 
-      c.nicho.toLowerCase().includes(cleanNiche.toLowerCase())
-    ) || {
-      codigo: "8299-7/99",
-      descricao: `Serviços especializados em ${cleanNiche}`,
-      ticket: "Médio"
-    };
+    // 1. Queries de busca direcionadas para coletar CNPJs reais
+    const queries = [
+      `${cleanNiche} ${cleanCity} ${cleanState} "CNPJ"`,
+      `${cleanNiche} ${cleanCity} ${cleanState} site:cnpj.biz`,
+      `${cleanNiche} ${cleanCity} ${cleanState} site:econodata.com.br`,
+      `${cleanNiche} ${cleanCity} ${cleanState} site:consultas.plus`
+    ];
 
-    const companies = nativePlaces.map((place, idx) => {
-      const seed = `${place.name}_${cleanCity}_${idx}`;
-      const strHash = Math.abs(seed.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0));
-      
-      const rawCnpj = generateValidCnpj(seed);
-      const formattedCnpj = rawCnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+    for (const q of queries) {
+      if (discoveredCnpjs.size >= searchLimit) break;
 
-      // Gerar nome dos sócios realistas para o QSA
-      const fn1 = COMMON_FIRST_NAMES[strHash % COMMON_FIRST_NAMES.length];
-      const ln1 = COMMON_LAST_NAMES[(strHash * 7) % COMMON_LAST_NAMES.length];
-      const fn2 = COMMON_FIRST_NAMES[(strHash + 3) % COMMON_FIRST_NAMES.length];
-      const ln2 = COMMON_LAST_NAMES[(strHash * 11) % COMMON_LAST_NAMES.length];
+      try {
+        const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(q)}&setlang=pt-BR&count=30`;
+        const resp = await fetch(searchUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "pt-BR,pt;q=0.9"
+          }
+        });
 
-      const socios = [
-        { nome: `${fn1} ${ln1}`.toUpperCase(), qualificacao: "Sócio-Administrador" }
-      ];
+        if (resp.ok) {
+          const html = await resp.text();
+          const $ = cheerio.load(html);
 
-      if (strHash % 2 === 0) {
-        socios.push({ nome: `${fn2} ${ln2}`.toUpperCase(), qualificacao: "Sócio" });
+          $("li.b_algo").each((_, el) => {
+            if (discoveredCnpjs.size >= searchLimit) return false;
+            const fullText = $(el).text();
+            const matches = fullText.matchAll(/\b(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\b|\b(\d{14})\b/g);
+            for (const m of matches) {
+              const clean = (m[1] || m[2]).replace(/\D/g, "");
+              if (clean.length === 14 && clean !== "00000000000000" && !discoveredCnpjs.has(clean)) {
+                discoveredCnpjs.add(clean);
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("[CNPJ Discovery] Aviso:", e.message);
       }
+    }
 
-      // Anos de abertura entre 2012 e 2024
-      const anoAbertura = 2012 + (strHash % 12);
-      const mesAbertura = String(1 + (strHash % 12)).padStart(2, "0");
-      const diaAbertura = String(1 + ((strHash * 3) % 28)).padStart(2, "0");
-      const dataAbertura = `${diaAbertura}/${mesAbertura}/${anoAbertura}`;
+    // 2. Se a busca direta em sites de CNPJ não atingiu o limite, busca estabelecimentos locais e extrai seus CNPJs reais
+    if (discoveredCnpjs.size < searchLimit && cleanCity) {
+      try {
+        const localPlaces = await scrapeGrowthHunterNative(cleanNiche, `${cleanCity}, ${cleanState}`, searchLimit);
+        for (const place of localPlaces) {
+          if (discoveredCnpjs.size >= searchLimit) break;
+          try {
+            const cnpjQ = `"${place.name}" "${cleanCity}" "${cleanState}" "CNPJ"`;
+            const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(cnpjQ)}&setlang=pt-BR&count=10`;
+            const resp = await fetch(searchUrl, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+              }
+            });
 
-      const capitalSocial = ((strHash % 18) + 2) * 10000; // Entre 20.000 e 200.000
-      const porte = capitalSocial > 100000 ? "Empresa de Pequeno Porte (EPP)" : "Microempresa (ME)";
+            if (resp.ok) {
+              const html = await resp.text();
+              const $ = cheerio.load(html);
+              $("li.b_algo").each((_, el) => {
+                const text = $(el).text();
+                const match = text.match(/\b(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\b/) || text.match(/\b(\d{14})\b/);
+                if (match) {
+                  const clean = (match[1] || match[2]).replace(/\D/g, "");
+                  if (clean.length === 14 && clean !== "00000000000000" && !discoveredCnpjs.has(clean)) {
+                    discoveredCnpjs.add(clean);
+                  }
+                }
+              });
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
 
-      const neighborhood = place.neighborhood || cityMeta.neighborhoods[idx % cityMeta.neighborhoods.length];
-      const phoneClean = place.phone || `55${ddd}9${8000 + (strHash % 1999)}${1000 + (strHash % 8999)}`;
-      const dddPhone = phoneClean.length >= 12 ? `(${phoneClean.slice(2,4)}) ${phoneClean.slice(4,9)}-${phoneClean.slice(9)}` : phoneClean;
+    console.log(`🔍 [CNPJ Search] Total de ${discoveredCnpjs.size} CNPJs REAIS encontrados. Consultando base da Receita Federal...`);
 
-      const razaoSocial = place.name.toUpperCase().includes("LTDA") || place.name.toUpperCase().includes("ME") 
-        ? place.name.toUpperCase() 
-        : `${place.name.toUpperCase()} SERVICOS LTDA`;
+    // 3. Consulta CADA CNPJ na base OFICIAL da Receita Federal (BrasilAPI / Minha Receita)
+    const verifiedCompanies = [];
+    for (const cnpj of Array.from(discoveredCnpjs)) {
+      try {
+        const details = await fetchCnpjDetails(cnpj);
+        if (details) {
+          verifiedCompanies.push(details);
+        }
+      } catch (lookupErr) {
+        console.warn(`[CNPJ Search] CNPJ ${cnpj} não retornou na Receita:`, lookupErr.message);
+      }
+    }
 
-      return {
-        cnpj: rawCnpj,
-        cnpj_formatted: formattedCnpj,
-        razao_social: razaoSocial,
-        nome_fantasia: place.name,
-        situacao_cadastral: "ATIVA",
-        data_situacao: dataAbertura,
-        data_abertura: dataAbertura,
-        cnae_fiscal: matchedCnae.codigo,
-        cnae_fiscal_descricao: matchedCnae.descricao || cleanNiche,
-        natureza_juridica: "206-2 - Sociedade Empresária Limitada",
-        porte: porte,
-        capital_social: capitalSocial,
-        opcao_simples: true,
-        opcao_mei: false,
-        endereco: {
-          logradouro: `Rua Comercial dos ${cleanNiche}s`,
-          numero: String(100 + (strHash % 890)),
-          bairro: neighborhood,
-          cep: `${ddd}000-${String(100 + (strHash % 890)).padStart(3, "0")}`,
-          municipio: cleanCity,
-          uf: cleanState
-        },
-        contatos: {
-          telefone1: dddPhone,
-          telefone2: "",
-          email: `contato@${place.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com.br`,
-          whatsapp_phone: phoneClean
-        },
-        socios: socios,
-        fonte: "Receita Federal (Base Nacional CNPJ)"
-      };
-    });
-
-    let filtered = companies;
+    let filtered = verifiedCompanies;
     if (onlyActive) {
-      filtered = filtered.filter(c => c.situacao_cadastral === "ATIVA");
+      filtered = filtered.filter(c => (c.situacao_cadastral || "").toUpperCase().includes("ATIVA"));
     }
     if (onlyWithPhone) {
-      filtered = filtered.filter(c => c.contatos?.telefone1 || c.contatos?.whatsapp_phone);
+      filtered = filtered.filter(c => c.contatos?.telefone1 || c.contatos?.telefone2 || c.contatos?.whatsapp_phone);
     }
 
-    console.log(`✅ [CNPJ Search] ${filtered.length} empresas com CNPJ ativo e QSA formatadas com sucesso.`);
+    console.log(`✅ [CNPJ Search] ${filtered.length} empresas 100% REAIS validadas pela Receita Federal.`);
 
     return res.json({
       success: true,
@@ -1000,139 +962,67 @@ app.post("/api/cnpj/search", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// 📱 WHATSAPP QR LOGIN & AUTOMATION ENGINE (Baileys / Webhook Protocol)
+// 📱 WHATSAPP QR LOGIN & AUTOMATION ENGINE (Baileys Real Socket Protocol)
 // ══════════════════════════════════════════════════════════════════════════
 
-let whatsappSession = {
-  status: "CONNECTED", // "DISCONNECTED" | "SCAN_QR" | "CONNECTING" | "CONNECTED"
-  phone: "5519998812233",
-  profileName: "GrowthHunter SDR & Sales Desk",
-  connectedAt: new Date().toISOString(),
-  qrCode: "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=GROWTHHUNTER_BAILEYS_SESSION_" + Date.now(),
-  battery: 95,
-  isBusiness: true
-};
-
-let whatsappMessagesStore = [
-  {
-    id: "msg_init_1",
-    phone: "5511998887766",
-    companyName: "Clínica Sorriso Perfeito",
-    direction: "OUTBOUND",
-    content: "Olá! Sou da GrowthHunter e notei que a página de vocês pode dobrar as consultas no WhatsApp.",
-    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-    status: "READ"
-  },
-  {
-    id: "msg_init_2",
-    phone: "5511998887766",
-    companyName: "Clínica Sorriso Perfeito",
-    direction: "INBOUND",
-    content: "Olá! Como funciona e qual o preço para desenvolver um site de alta conversão?",
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    status: "DELIVERED"
-  }
-];
-
-let automationRules = {
-  welcomeEnabled: true,
-  welcomeMessage: "Olá! Obrigado por entrar em contato com a nossa equipe. Em instantes um de nossos consultores vai te atender!",
-  officeHoursEnabled: true,
-  officeHoursStart: "08:00",
-  officeHoursEnd: "18:00",
-  officeHoursMessage: "Olá! Nosso horário de atendimento é de Segunda a Sexta das 08h às 18h. Deixe sua mensagem e responderemos logo no início do expediente!",
-  keywordRules: [
-    {
-      id: "rule_preco",
-      keyword: "preço, valor, quanto custa, orçamento",
-      replyText: "Trabalhamos com projetos sob medida para o seu nicho! Para te passar a proposta exata, qual é o segmento da sua empresa e a cidade?",
-      enabled: true
-    },
-    {
-      id: "rule_reuniao",
-      keyword: "reunião, agendar, horário, marcar",
-      replyText: "Excelente! Tenho horários disponíveis amanhã às 14h ou 16h para uma apresentação rápida de 15 minutos. Qual fica melhor para você?",
-      enabled: true
-    },
-    {
-      id: "rule_site",
-      keyword: "site, landing page, reformulação",
-      replyText: "Desenvolvemos páginas ultra-rápidas otimizadas para celular com botão direto de WhatsApp e Meta Pixel configurado. Quer que eu te envie 2 exemplos reais?",
-      enabled: true
-    }
-  ]
-};
-
-// 1. Obter Status da Sessão WhatsApp
+// 1. Obter Status da Sessão WhatsApp Real
 app.get("/api/whatsapp/session", (req, res) => {
+  const session = getWhatsAppSession();
+  const storedMessages = getStoredMessages();
   return res.json({
     success: true,
-    session: whatsappSession,
-    totalStoredMessages: whatsappMessagesStore.length
+    session: session,
+    totalStoredMessages: storedMessages.length
   });
 });
 
-// 2. Gerar Novo QR Code para Conexão
-app.post("/api/whatsapp/connect-qr", (req, res) => {
-  whatsappSession.status = "SCAN_QR";
-  whatsappSession.qrCode = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=GROWTHHUNTER_SESSION_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-  
-  // Simula conexão automática após 8 segundos se for teste local
-  setTimeout(() => {
-    whatsappSession.status = "CONNECTED";
-    whatsappSession.connectedAt = new Date().toISOString();
-  }, 12000);
-
-  return res.json({
-    success: true,
-    status: "SCAN_QR",
-    qrCode: whatsappSession.qrCode,
-    message: "Aponte a câmera do WhatsApp no celular em Aparelhos Conectados."
-  });
+// 2. Iniciar / Gerar Novo QR Code Real Baileys para Conexão
+app.post("/api/whatsapp/connect-qr", async (req, res) => {
+  try {
+    await initWhatsAppBaileys();
+    
+    // Aguarda 1.5s para capturar o QR gerado pelo socket
+    setTimeout(() => {
+      const session = getWhatsAppSession();
+      return res.json({
+        success: true,
+        status: session.status,
+        qrCode: session.qrCode,
+        message: "QR Code criptografado gerado diretamente pelo WhatsApp Socket."
+      });
+    }, 1500);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// 3. Desconectar Sessão
-app.post("/api/whatsapp/disconnect", (req, res) => {
-  whatsappSession.status = "DISCONNECTED";
-  whatsappSession.phone = "";
-  whatsappSession.profileName = "";
-  return res.json({
-    success: true,
-    status: "DISCONNECTED",
-    message: "Sessão do WhatsApp encerrada com sucesso."
-  });
+// 3. Desconectar Sessão Real
+app.post("/api/whatsapp/disconnect", async (req, res) => {
+  try {
+    await disconnectWhatsAppSession();
+    return res.json({
+      success: true,
+      status: "DISCONNECTED",
+      message: "Sessão do WhatsApp encerrada com sucesso."
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// 4. Enviar Mensagem Individual
-app.post("/api/whatsapp/send-message", (req, res) => {
-  const { phone, message, companyName = "" } = req.body;
+// 4. Enviar Mensagem Individual Real
+app.post("/api/whatsapp/send-message", async (req, res) => {
+  const { phone, message } = req.body;
 
   if (!phone || !message) {
     return res.status(400).json({ error: "Telefone e mensagem são obrigatórios." });
   }
 
-  const cleanPhone = String(phone).replace(/\D/g, "");
-  const newMsg = {
-    id: `msg_${Date.now()}`,
-    phone: cleanPhone,
-    companyName: companyName || "Lead",
-    direction: "OUTBOUND",
-    content: message,
-    timestamp: new Date().toISOString(),
-    status: "SENT"
-  };
-
-  whatsappMessagesStore.push(newMsg);
-
-  return res.json({
-    success: true,
-    messageId: newMsg.id,
-    status: "SENT",
-    payload: newMsg
-  });
+  const result = await sendWhatsAppRealMessage(phone, message);
+  return res.json(result);
 });
 
-// 5. Disparo em Massa Inteligente (Bulk Sender com Throttling)
+// 5. Disparo em Massa Inteligente (Bulk Sender com Throttling Real)
 app.post("/api/whatsapp/bulk-send", async (req, res) => {
   const { leads = [], templateText = "", delaySeconds = 3 } = req.body;
 
@@ -1141,7 +1031,8 @@ app.post("/api/whatsapp/bulk-send", async (req, res) => {
   }
 
   const sentLogs = [];
-  leads.forEach((lead, idx) => {
+  for (let i = 0; i < leads.length; i++) {
+    const lead = leads[i];
     let customizedText = templateText
       .replace(/{{nome}}/gi, lead.name || "Colega")
       .replace(/{{empresa}}/gi, lead.name || "sua empresa")
@@ -1149,19 +1040,11 @@ app.post("/api/whatsapp/bulk-send", async (req, res) => {
       .replace(/{{cidade}}/gi, lead.city || "sua cidade")
       .replace(/{{site}}/gi, lead.website || "seu Instagram");
 
-    const newMsg = {
-      id: `bulk_msg_${Date.now()}_${idx}`,
-      phone: String(lead.phone || "").replace(/\D/g, ""),
-      companyName: lead.name,
-      direction: "OUTBOUND",
-      content: customizedText,
-      timestamp: new Date(Date.now() + idx * (delaySeconds * 1000)).toISOString(),
-      status: "SENT"
-    };
-
-    whatsappMessagesStore.push(newMsg);
-    sentLogs.push({ leadName: lead.name, phone: lead.phone, status: "DISPATCHED", time: newMsg.timestamp });
-  });
+    if (lead.phone) {
+      await sendWhatsAppRealMessage(lead.phone, customizedText);
+      sentLogs.push({ leadName: lead.name, phone: lead.phone, status: "DISPATCHED", time: new Date().toISOString() });
+    }
+  }
 
   return res.json({
     success: true,
@@ -1171,17 +1054,15 @@ app.post("/api/whatsapp/bulk-send", async (req, res) => {
   });
 });
 
-// 6. Configurações e Regras de Automação
+// 6. Configurações e Regras de Automação Reais
 app.get("/api/whatsapp/automation/rules", (req, res) => {
-  return res.json({ success: true, rules: automationRules });
+  return res.json({ success: true, rules: getAutomationRules() });
 });
 
 app.post("/api/whatsapp/automation/rules", (req, res) => {
   const { rules } = req.body;
-  if (rules) {
-    automationRules = { ...automationRules, ...rules };
-  }
-  return res.json({ success: true, rules: automationRules });
+  const updated = updateAutomationRules(rules || {});
+  return res.json({ success: true, rules: updated });
 });
 
 // 7. Disparo e Teste de Webhooks (Zapier / Make / Google Sheets)

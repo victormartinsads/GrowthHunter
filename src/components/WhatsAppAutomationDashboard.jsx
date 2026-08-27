@@ -93,18 +93,31 @@ export default function WhatsAppAutomationDashboard({
   const [newKeyword, setNewKeyword] = useState("");
   const [newReply, setNewReply] = useState("");
 
-  // Carregar status da sessão
+  // Carregar status da sessão periodicamente (Polling a cada 2.5s quando não conectado)
   useEffect(() => {
-    async function loadSession() {
+    let intervalId = null;
+
+    async function checkSession() {
       try {
         const res = await fetch("http://localhost:3001/api/whatsapp/session");
         if (res.ok) {
           const data = await res.json();
-          if (data.session) setSession(data.session);
+          if (data.session) {
+            setSession(data.session);
+          }
         }
       } catch (e) {}
     }
-    loadSession();
+
+    checkSession();
+
+    intervalId = setInterval(() => {
+      checkSession();
+    }, 2500);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
 
   const handleGenerateQr = async () => {
