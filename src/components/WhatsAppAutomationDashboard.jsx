@@ -127,13 +127,22 @@ export default function WhatsAppAutomationDashboard({
   }, [activeChatPhone]);
 
   const handleGenerateQr = async () => {
+    if (session.status === "CONNECTED") {
+      showToast?.("Seu WhatsApp já está conectado e pronto para uso!", "success");
+      return;
+    }
     setIsLoadingQr(true);
     try {
       const res = await fetch("http://localhost:3001/api/whatsapp/connect-qr", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        setSession(prev => ({ ...prev, status: "SCAN_QR", qrCode: data.qrCode }));
-        showToast?.("QR Code gerado! Aponte o WhatsApp do celular.", "info");
+        if (data.session?.status === "CONNECTED") {
+          setSession(data.session);
+          showToast?.("WhatsApp reconectado com sucesso!", "success");
+        } else {
+          setSession(prev => ({ ...prev, status: "SCAN_QR", qrCode: data.qrCode }));
+          showToast?.("QR Code gerado! Aponte o WhatsApp do celular.", "info");
+        }
       }
     } catch (e) {
       showToast?.("Erro ao gerar QR Code.", "error");

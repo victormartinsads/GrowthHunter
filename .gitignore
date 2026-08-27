@@ -28,6 +28,7 @@ dist-ssr
 .env.local
 .env.production
 
-# WhatsApp Session Auth Tokens
+# WhatsApp Session Auth Tokens & Local DB
 baileys_auth_info/
 baileys_store/
+baileys_*.json

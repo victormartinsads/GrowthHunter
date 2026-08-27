@@ -9,10 +9,15 @@ import fs from "fs";
 import path from "path";
 
 const AUTH_DIR = path.resolve("./baileys_auth_info");
+const CHATS_FILE = path.resolve("./baileys_chats_db.json");
+const MESSAGES_FILE = path.resolve("./baileys_messages_db.json");
+const SESSION_FILE = path.resolve("./baileys_session_db.json");
 
 let sock = null;
 let isInitializing = false;
 let currentQrCodeDataUrl = null;
+
+// Carrega estado persistido
 let sessionState = {
   status: "DISCONNECTED", // "DISCONNECTED" | "SCAN_QR" | "CONNECTING" | "CONNECTED"
   phone: "",
@@ -22,9 +27,75 @@ let sessionState = {
   battery: 100
 };
 
-// Armazenamento de conversas e mensagens
+// Armazenamento 100% PERSISTENTE de conversas e mensagens
 let chatsStore = new Map(); // key: phone or JID, value: { jid, phone, name, avatar, lastMessage, timestamp, unreadCount }
 let messagesStore = []; // array de { id, jid, phone, contactName, direction, type, content, mediaUrl, fileName, timestamp, status }
+
+// ── Funções de Persistência em Disco ──
+function loadPersistedData() {
+  try {
+    if (fs.existsSync(CHATS_FILE)) {
+      const raw = fs.readFileSync(CHATS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      chatsStore = new Map(Object.entries(parsed));
+      console.log(`📂 [WhatsApp DB] ${chatsStore.size} conversas carregadas do disco.`);
+    }
+  } catch (e) {
+    console.error("Erro ao carregar chats do disco:", e);
+  }
+
+  try {
+    if (fs.existsSync(MESSAGES_FILE)) {
+      const raw = fs.readFileSync(MESSAGES_FILE, "utf-8");
+      messagesStore = JSON.parse(raw);
+      console.log(`📂 [WhatsApp DB] ${messagesStore.length} mensagens carregadas do disco.`);
+    }
+  } catch (e) {
+    console.error("Erro ao carregar mensagens do disco:", e);
+  }
+
+  try {
+    if (fs.existsSync(SESSION_FILE)) {
+      const raw = fs.readFileSync(SESSION_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      sessionState = { ...sessionState, ...parsed };
+      if (fs.existsSync(path.join(AUTH_DIR, "creds.json"))) {
+        sessionState.status = "CONNECTED";
+      }
+    }
+  } catch (e) {}
+}
+
+function saveChatsToDisk() {
+  try {
+    const obj = Object.fromEntries(chatsStore);
+    fs.writeFileSync(CHATS_FILE, JSON.stringify(obj, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Erro ao salvar chats no disco:", e);
+  }
+}
+
+function saveMessagesToDisk() {
+  try {
+    fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messagesStore, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Erro ao salvar mensagens no disco:", e);
+  }
+}
+
+function saveSessionToDisk() {
+  try {
+    fs.writeFileSync(SESSION_FILE, JSON.stringify({
+      phone: sessionState.phone,
+      profileName: sessionState.profileName,
+      avatar: sessionState.avatar,
+      connectedAt: sessionState.connectedAt
+    }, null, 2), "utf-8");
+  } catch (e) {}
+}
+
+// Inicializa banco de dados local
+loadPersistedData();
 
 let automationRules = {
   welcomeEnabled: false,
@@ -93,7 +164,9 @@ export async function initWhatsAppBaileys() {
       }
 
       if (connection === "connecting") {
-        sessionState.status = "CONNECTING";
+        if (sessionState.status !== "CONNECTED") {
+          sessionState.status = "CONNECTING";
+        }
       }
 
       if (connection === "open") {
@@ -101,20 +174,21 @@ export async function initWhatsAppBaileys() {
         const userJid = sock.user?.id || "";
         const cleanPhone = userJid.split(":")[0].split("@")[0];
         
-        let myAvatar = null;
+        let myAvatar = sessionState.avatar;
         try {
           myAvatar = await sock.profilePictureUrl(userJid, "image");
         } catch (e) {}
 
         sessionState = {
           status: "CONNECTED",
-          phone: cleanPhone,
-          profileName: sock.user?.name || "WhatsApp Business",
+          phone: cleanPhone || sessionState.phone,
+          profileName: sock.user?.name || sessionState.profileName || "WhatsApp Business",
           avatar: myAvatar,
-          connectedAt: new Date().toISOString(),
+          connectedAt: sessionState.connectedAt || new Date().toISOString(),
           battery: 98
         };
         currentQrCodeDataUrl = null;
+        saveSessionToDisk();
       }
 
       if (connection === "close") {
@@ -123,7 +197,10 @@ export async function initWhatsAppBaileys() {
         console.log(`⚠️ [Baileys] Conexão fechada (código: ${statusCode}). Deslogado: ${isLoggedOut}`);
 
         if (!isLoggedOut) {
-          sessionState.status = "CONNECTING";
+          // Mantém o status conectado para a interface não piscar
+          if (fs.existsSync(path.join(AUTH_DIR, "creds.json"))) {
+            sessionState.status = "CONNECTED";
+          }
           setTimeout(() => {
             isInitializing = false;
             initWhatsAppBaileys();
@@ -137,12 +214,39 @@ export async function initWhatsAppBaileys() {
           try {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
           } catch (e) {}
+          saveSessionToDisk();
         }
+      }
+    });
+
+    // Escuta sincronização inicial de histórico
+    sock.ev.on("messaging-history.set", ({ chats, contacts, messages: histMessages }) => {
+      console.log(`📥 [Baileys Sync] Recebendo histórico: ${chats?.length || 0} chats, ${histMessages?.length || 0} msgs`);
+      if (chats) {
+        for (const c of chats) {
+          if (!c.id || c.id.includes("@g.us")) continue;
+          const phone = c.id.replace("@s.whatsapp.net", "").replace("@lid", "").replace(/\D/g, "");
+          if (!phone) continue;
+          if (!chatsStore.has(phone)) {
+            chatsStore.set(phone, {
+              jid: c.id,
+              phone: phone,
+              name: c.name || `+${phone}`,
+              avatar: null,
+              lastMessage: "",
+              timestamp: c.conversationTimestamp ? new Date(Number(c.conversationTimestamp) * 1000).toISOString() : new Date().toISOString(),
+              unreadCount: c.unreadCount || 0
+            });
+          }
+        }
+        saveChatsToDisk();
       }
     });
 
     // Escuta mensagens recebidas e enviadas reais
     sock.ev.on("messages.upsert", async ({ messages: newMessages }) => {
+      let hasNewData = false;
+
       for (const msg of newMessages) {
         if (!msg.message) continue;
 
@@ -196,6 +300,7 @@ export async function initWhatsAppBaileys() {
 
         if (!messagesStore.some(m => m.id === storedMsg.id)) {
           messagesStore.push(storedMsg);
+          hasNewData = true;
         }
 
         const chatKey = cleanPhone || senderJid;
@@ -210,6 +315,7 @@ export async function initWhatsAppBaileys() {
           timestamp: storedMsg.timestamp,
           unreadCount: isFromMe ? 0 : (existingChat.unreadCount || 0) + 1
         });
+        hasNewData = true;
 
         // Tenta buscar a foto de perfil assincronamente se ainda não tiver
         if (!existingChat.avatar) {
@@ -219,16 +325,21 @@ export async function initWhatsAppBaileys() {
               if (c) {
                 c.avatar = avatarUrl;
                 chatsStore.set(chatKey, c);
+                saveChatsToDisk();
               }
             }
           }).catch(() => {});
         }
       }
+
+      if (hasNewData) {
+        saveChatsToDisk();
+        saveMessagesToDisk();
+      }
     });
 
   } catch (err) {
     console.error("Erro ao iniciar Baileys WhatsApp Socket:", err);
-    sessionState.status = "DISCONNECTED";
   } finally {
     isInitializing = false;
   }
@@ -292,6 +403,7 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
 
     if (!messagesStore.some(m => m.id === newMsg.id)) {
       messagesStore.push(newMsg);
+      saveMessagesToDisk();
     }
 
     const chatKey = cleanDigits || targetJid;
@@ -305,6 +417,7 @@ export async function sendWhatsAppRealMessage(targetInput, messageText) {
       timestamp: newMsg.timestamp,
       unreadCount: 0
     });
+    saveChatsToDisk();
 
     return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
   } catch (err) {
@@ -348,6 +461,7 @@ export async function sendWhatsAppAudioMessage(targetInput, audioBase64) {
     };
 
     messagesStore.push(newMsg);
+    saveMessagesToDisk();
 
     const chatKey = cleanDigits || targetJid;
     const existing = chatsStore.get(chatKey) || {};
@@ -360,6 +474,7 @@ export async function sendWhatsAppAudioMessage(targetInput, audioBase64) {
       timestamp: newMsg.timestamp,
       unreadCount: 0
     });
+    saveChatsToDisk();
 
     return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
   } catch (err) {
@@ -418,6 +533,7 @@ export async function sendWhatsAppMediaMessage(targetInput, { mediaBase64, media
     };
 
     messagesStore.push(newMsg);
+    saveMessagesToDisk();
 
     const chatKey = cleanDigits || targetJid;
     const existing = chatsStore.get(chatKey) || {};
@@ -430,6 +546,7 @@ export async function sendWhatsAppMediaMessage(targetInput, { mediaBase64, media
       timestamp: newMsg.timestamp,
       unreadCount: 0
     });
+    saveChatsToDisk();
 
     return { success: true, messageId: newMsg.id, status: "SENT", jid: targetJid };
   } catch (err) {
@@ -439,8 +556,10 @@ export async function sendWhatsAppMediaMessage(targetInput, { mediaBase64, media
 }
 
 export function getWhatsAppSession() {
+  const isAuthSaved = fs.existsSync(path.join(AUTH_DIR, "creds.json"));
   return {
     ...sessionState,
+    status: isAuthSaved ? "CONNECTED" : sessionState.status,
     qrCode: currentQrCodeDataUrl
   };
 }
@@ -480,11 +599,10 @@ export async function disconnectWhatsAppSession() {
   sessionState.profileName = "";
   sessionState.avatar = null;
   currentQrCodeDataUrl = null;
-  chatsStore.clear();
-  messagesStore = [];
   
   try {
     fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE);
   } catch (e) {}
 
   return { success: true };
